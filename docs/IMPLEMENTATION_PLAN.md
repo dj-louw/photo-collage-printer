@@ -25,6 +25,11 @@ This file documents the implementation steps for the Photo Collage Printer web-a
 - Ready for static hosting (e.g., GitHub Pages)
 - To deploy: copy contents of `public/` to hosting platform
 
+
+## Other Ideas:
+- Shift for allowing freeform resize of the image
+- Alt to enable crop mode.
+
 ---
 
 For further refinement, update this plan as features are added or improved.
