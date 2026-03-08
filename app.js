@@ -10,6 +10,20 @@ let pages = [{
 }];
 let currentPage = 0;
 
+// Selection state
+let selectedPhoto = null;
+
+// Drag state
+let dragIdx = null;
+let dragOffset = null;
+let dragging = false;
+
+// Resize state
+let resizing = false;
+let resizeStart = null;
+let resizePhotoIdx = null;
+let resizeOrig = null;
+
 function render() {
   app.innerHTML = '';
   renderPageControls();
@@ -48,11 +62,13 @@ function renderCollagePage() {
   const page = pages[currentPage];
   const div = document.createElement('div');
   div.className = 'collage-page';
-  div.style.width = page.size.width * 3 + 'px'; // scale mm to px
-  div.style.height = page.size.height * 3 + 'px';
+  const pageWidthPx = page.size.width * 3;
+  const pageHeightPx = page.size.height * 3;
+  div.style.width = pageWidthPx + 'px';
+  div.style.height = pageHeightPx + 'px';
 
   page.photos.forEach((photo, idx) => {
-    // Container for image and handle
+    // Unrotated container: positions the photo on the page
     const container = document.createElement('div');
     container.style.position = 'absolute';
     container.style.left = photo.x + 'px';
@@ -60,19 +76,31 @@ function renderCollagePage() {
     container.style.width = photo.width + 'px';
     container.style.height = photo.height + 'px';
     container.style.pointerEvents = 'auto';
+    container.dataset.photoIndex = String(idx);
+
+    // Rotated wrapper: rotates image + resize handles around center
+    const rotateWrapper = document.createElement('div');
+    rotateWrapper.style.position = 'absolute';
+    rotateWrapper.style.left = '0';
+    rotateWrapper.style.top = '0';
+    rotateWrapper.style.width = '100%';
+    rotateWrapper.style.height = '100%';
+    rotateWrapper.style.transformOrigin = 'center center';
+    rotateWrapper.style.transform = `rotate(${photo.rotation || 0}deg)`;
 
     const img = document.createElement('img');
     img.src = photo.src;
     img.className = 'photo';
     img.style.width = '100%';
     img.style.height = '100%';
+    img.style.objectFit = 'contain';
     img.onclick = e => {
       e.stopPropagation();
       selectPhoto(idx);
     };
-    container.appendChild(img);
+    rotateWrapper.appendChild(img);
 
-    // Show resize handles on corners and edges if selected
+    // Show resize handles if selected
     if (selectedPhoto === idx) {
       const handlePositions = [
         { name: 'nw', left: '-8px', top: '-8px', cursor: 'nwse-resize' },
@@ -100,11 +128,10 @@ function renderCollagePage() {
         handle.style.cursor = pos.cursor;
         handle.setAttribute('data-handle', pos.name);
         handle.onmousedown = e => startResize(e, idx, pos.name);
-        container.appendChild(handle);
+        rotateWrapper.appendChild(handle);
       });
-    }
-    // Add rotate icon for selected image
-    if (selectedPhoto === idx) {
+
+      // Rotate icon: stays at top-left of unrotated bounding box
       const rotateIcon = document.createElement('img');
       rotateIcon.src = 'icons/file-rotate-right.svg';
       rotateIcon.alt = 'Rotate';
@@ -117,12 +144,14 @@ function renderCollagePage() {
       rotateIcon.style.borderRadius = '50%';
       rotateIcon.style.boxShadow = '0 1px 4px rgba(0,0,0,0.15)';
       rotateIcon.style.cursor = 'pointer';
-      rotateIcon.onclick = function(e) {
+      rotateIcon.onclick = e => {
         e.stopPropagation();
         rotatePhoto(idx);
       };
       container.appendChild(rotateIcon);
     }
+
+    container.appendChild(rotateWrapper);
     div.appendChild(container);
   });
 
@@ -135,13 +164,16 @@ window.addPage = function() {
   currentPage = pages.length - 1;
   render();
 };
+
 window.removePage = function() {
   if (pages.length > 1) {
     pages.splice(currentPage, 1);
     currentPage = Math.max(0, currentPage - 1);
+    selectedPhoto = null;
     render();
   }
 };
+
 window.changePageSize = function(size) {
   const sizes = {
     'A4': { width: 210, height: 297 },
@@ -155,25 +187,30 @@ window.changePageSize = function(size) {
 window.importPhoto = function(event) {
   const file = event.target.files[0];
   if (!file) return;
+
   const reader = new FileReader();
-  reader.onload = function(e) {
+  reader.onload = function(ev) {
     const img = new Image();
     img.onload = function() {
-      // Import at 50% of page width, retain aspect ratio
       const page = pages[currentPage];
-      const targetWidth = page.size.width * 3 * 0.5; // scale mm to px, 50%
-      let width = targetWidth;
-      let height = img.naturalHeight * (targetWidth / img.naturalWidth);
-      pages[currentPage].photos.push({
-        src: e.target.result,
+      const pageWidthPx = page.size.width * 3;
+      const targetWidth = pageWidthPx * 0.5; // 50% of page width
+      const scale = targetWidth / img.naturalWidth;
+      const width = targetWidth;
+      const height = img.naturalHeight * scale;
+
+      page.photos.push({
+        src: ev.target.result,
         x: 10,
         y: 10,
         width,
-        height
+        height,
+        rotation: 0
       });
+      selectedPhoto = page.photos.length - 1;
       render();
     };
-    img.src = e.target.result;
+    img.src = ev.target.result;
   };
   reader.readAsDataURL(file);
 };
@@ -182,197 +219,189 @@ window.printCollage = function() {
   window.print();
 };
 
-// Drag and drop (custom)
-let dragIdx = null;
-let dragOffset = null;
-let dragging = false;
-
-document.onmousedown = function(e) {
-  // Only start drag if clicking on an image
-  if (e.target.classList && e.target.classList.contains('photo')) {
-    const idx = Array.from(e.target.parentElement.parentElement.children).indexOf(e.target.parentElement);
-    dragIdx = idx;
-    dragging = true;
-    const photo = pages[currentPage].photos[idx];
-    dragOffset = {
-      x: e.pageX - app.offsetLeft - photo.x,
-      y: e.pageY - app.offsetTop - photo.y
-    };
-    e.preventDefault();
-  }
-};
-
-document.onmousemove = function(e) {
-  if (dragging && dragIdx !== null) {
-    const photo = pages[currentPage].photos[dragIdx];
-    let newX = e.pageX - app.offsetLeft - dragOffset.x;
-    let newY = e.pageY - app.offsetTop - dragOffset.y;
-    const pageWidth = pages[currentPage].size.width * 3;
-    const pageHeight = pages[currentPage].size.height * 3;
-    newX = Math.max(0, Math.min(newX, pageWidth - photo.width));
-    newY = Math.max(0, Math.min(newY, pageHeight - photo.height));
-    photo.x = newX;
-    photo.y = newY;
-    render();
-  }
-};
-
-document.onmouseup = function() {
-  resizing = false;
-  resizePhotoIdx = null;
-  resizeStart = null;
-  resizeOrig = null;
-  dragging = false;
-  dragIdx = null;
-  dragOffset = null;
-};
-window.addEventListener('mouseup', function() {
-  resizing = false;
-  resizePhotoIdx = null;
-  resizeStart = null;
-  resizeOrig = null;
-  dragging = false;
-  dragIdx = null;
-  dragOffset = null;
-});
-
-window.addEventListener('mousemove', function(e) {
-  if (dragging && dragIdx !== null) {
-    const photo = pages[currentPage].photos[dragIdx];
-    let newX = e.pageX - app.offsetLeft - dragOffset.x;
-    let newY = e.pageY - app.offsetTop - dragOffset.y;
-    const pageWidth = pages[currentPage].size.width * 3;
-    const pageHeight = pages[currentPage].size.height * 3;
-    newX = Math.max(0, Math.min(newX, pageWidth - photo.width));
-    newY = Math.max(0, Math.min(newY, pageHeight - photo.height));
-    photo.x = newX;
-    photo.y = newY;
-    render();
-  }
-});
-
-let selectedPhoto = null;
+// Selection helper
 function selectPhoto(idx) {
   selectedPhoto = idx;
   render();
 }
 
-let resizing = false;
-let resizeStart = null;
-let resizePhotoIdx = null;
-let resizeOrig = null;
-document.onmousemove = function(e) {
-  if (resizing && resizePhotoIdx !== null) {
-    const photo = pages[currentPage].photos[resizePhotoIdx];
-    const dx = e.pageX - resizeStart.x;
-    const dy = e.pageY - resizeStart.y;
-    let newWidth = resizeOrig.width;
-    let newHeight = resizeOrig.height;
-    let newX = photo.x;
-    let newY = photo.y;
-    const handle = resizeOrig.handle;
-    const pageWidth = pages[currentPage].size.width * 3;
-    const pageHeight = pages[currentPage].size.height * 3;
-    if (["nw","ne","sw","se"].includes(handle)) {
-      // Corners: always lock aspect ratio
-      let widthChange = 0, heightChange = 0;
-      if (handle === "nw") {
-        widthChange = -dx;
-        heightChange = -dy;
-      } else if (handle === "ne") {
-        widthChange = dx;
-        heightChange = -dy;
-      } else if (handle === "sw") {
-        widthChange = -dx;
-        heightChange = dy;
-      } else if (handle === "se") {
-        widthChange = dx;
-        heightChange = dy;
-      }
-      // Lock dominant axis on first mousemove
-      if (!resizeOrig.dominant) {
-        resizeOrig.dominant = Math.abs(widthChange) > Math.abs(heightChange) ? 'width' : 'height';
-      }
-      const aspect = resizeOrig.width / resizeOrig.height;
-      if (resizeOrig.dominant === 'width') {
-        newWidth = resizeOrig.width + widthChange;
-        newHeight = newWidth / aspect;
-      } else {
-        newHeight = resizeOrig.height + heightChange;
-        newWidth = newHeight * aspect;
-      }
-      // Update position for left/top handles
-      if (handle === "nw") {
-        newX = resizeOrig.x + (resizeOrig.width - newWidth);
-        newY = resizeOrig.y + (resizeOrig.height - newHeight);
-      } else if (handle === "ne") {
-        newY = resizeOrig.y + (resizeOrig.height - newHeight);
-      } else if (handle === "sw") {
-        newX = resizeOrig.x + (resizeOrig.width - newWidth);
-      }
-      // Stop resizing if any edge hits the page border
-      if (newX < 0) {
-        newWidth += newX;
-        newHeight = newWidth / aspect;
-        newX = 0;
-      }
-      if (newY < 0) {
-        newHeight += newY;
-        newWidth = newHeight * aspect;
-        newY = 0;
-      }
-      if (newX + newWidth > pageWidth) {
-        newWidth = pageWidth - newX;
-        newHeight = newWidth / aspect;
-      }
-      if (newY + newHeight > pageHeight) {
-        newHeight = pageHeight - newY;
-        newWidth = newHeight * aspect;
-      }
-    } else {
-      // Edges: allow stretching (break aspect ratio)
-      if (handle === "n") {
-        newHeight -= dy;
-        newY = resizeOrig.y + (resizeOrig.height - newHeight);
-      } else if (handle === "s") {
-        newHeight += dy;
-      } else if (handle === "w") {
-        newWidth -= dx;
-        newX = resizeOrig.x + (resizeOrig.width - newWidth);
-      } else if (handle === "e") {
-        newWidth += dx;
-      }
-      // Clamp position and size for edge handles
-      newWidth = Math.max(20, newWidth);
-      newHeight = Math.max(20, newHeight);
-      if (newX < 0) {
-        newWidth += newX;
-        newX = 0;
-      }
-      if (newY < 0) {
-        newHeight += newY;
-        newY = 0;
-      }
-      if (newX + newWidth > pageWidth) {
-        newWidth = pageWidth - newX;
-      }
-      if (newY + newHeight > pageHeight) {
-        newHeight = pageHeight - newY;
-      }
+// Rotate photo by 90 degrees clockwise
+function rotatePhoto(idx) {
+  const photo = pages[currentPage].photos[idx];
+  const current = photo.rotation || 0;
+  photo.rotation = (current + 90) % 360;
+  render();
+}
+
+// Expose rotation for any global handlers (defensive)
+window.rotatePhoto = rotatePhoto;
+
+// Resize start
+function startResize(e, idx, handle) {
+  e.stopPropagation();
+  e.preventDefault();
+  resizing = true;
+  resizePhotoIdx = idx;
+  resizeStart = { x: e.pageX, y: e.pageY };
+  const photo = pages[currentPage].photos[idx];
+  resizeOrig = {
+    width: photo.width,
+    height: photo.height,
+    x: photo.x,
+    y: photo.y,
+    handle,
+    dominant: null
+  };
+}
+
+// Global mouse handlers for drag + resize
+document.addEventListener('mousedown', function(e) {
+  // Only start drag if clicking directly on an image (not handles/icons)
+  if (!(e.target.classList && e.target.classList.contains('photo'))) return;
+
+  const container = e.target.closest('[data-photo-index]');
+  if (!container) return;
+
+  const idx = Number(container.dataset.photoIndex);
+  if (Number.isNaN(idx)) return;
+
+  dragIdx = idx;
+  dragging = true;
+  const photo = pages[currentPage].photos[idx];
+  dragOffset = {
+    x: e.pageX - app.offsetLeft - photo.x,
+    y: e.pageY - app.offsetTop - photo.y
+  };
+  e.preventDefault();
+});
+
+document.addEventListener('mousemove', function(e) {
+  const pageWidth = pages[currentPage].size.width * 3;
+  const pageHeight = pages[currentPage].size.height * 3;
+
+  if (dragging && dragIdx !== null) {
+    const photo = pages[currentPage].photos[dragIdx];
+    let newX = e.pageX - app.offsetLeft - dragOffset.x;
+    let newY = e.pageY - app.offsetTop - dragOffset.y;
+    newX = Math.max(0, Math.min(newX, pageWidth - photo.width));
+    newY = Math.max(0, Math.min(newY, pageHeight - photo.height));
+    photo.x = newX;
+    photo.y = newY;
+    render();
+    return;
+  }
+
+  if (!resizing || resizePhotoIdx === null) return;
+
+  const photo = pages[currentPage].photos[resizePhotoIdx];
+  const dx = e.pageX - resizeStart.x;
+  const dy = e.pageY - resizeStart.y;
+  const minSize = 20;
+
+  let newWidth = resizeOrig.width;
+  let newHeight = resizeOrig.height;
+  let newX = resizeOrig.x;
+  let newY = resizeOrig.y;
+
+  const aspect = resizeOrig.width / resizeOrig.height;
+  const isCorner = ['nw', 'ne', 'se', 'sw'].includes(resizeOrig.handle);
+
+  if (isCorner) {
+    let widthChange = 0;
+    let heightChange = 0;
+
+    if (resizeOrig.handle === 'se') {
+      widthChange = dx;
+      heightChange = dy;
+    } else if (resizeOrig.handle === 'sw') {
+      widthChange = -dx;
+      heightChange = dy;
+    } else if (resizeOrig.handle === 'ne') {
+      widthChange = dx;
+      heightChange = -dy;
+    } else if (resizeOrig.handle === 'nw') {
+      widthChange = -dx;
+      heightChange = -dy;
     }
-    // Minimum size
-    newWidth = Math.max(20, newWidth);
-    newHeight = Math.max(20, newHeight);
-    if (newWidth > 20 && newHeight > 20) {
-      photo.width = newWidth;
-      photo.height = newHeight;
-      photo.x = newX;
-      photo.y = newY;
-      render();
+
+    if (!resizeOrig.dominant) {
+      resizeOrig.dominant = Math.abs(widthChange) >= Math.abs(heightChange) ? 'width' : 'height';
+    }
+
+    if (resizeOrig.dominant === 'width') {
+      let targetWidth = resizeOrig.width + (resizeOrig.handle === 'sw' || resizeOrig.handle === 'nw' ? -widthChange : widthChange);
+      if (targetWidth < minSize) targetWidth = minSize;
+      newWidth = targetWidth;
+      newHeight = newWidth / aspect;
+    } else {
+      let targetHeight = resizeOrig.height + (resizeOrig.handle === 'ne' || resizeOrig.handle === 'nw' ? -heightChange : heightChange);
+      if (targetHeight < minSize) targetHeight = minSize;
+      newHeight = targetHeight;
+      newWidth = newHeight * aspect;
+    }
+
+    if (resizeOrig.handle === 'sw' || resizeOrig.handle === 'nw') {
+      newX = resizeOrig.x + (resizeOrig.width - newWidth);
+    }
+    if (resizeOrig.handle === 'nw' || resizeOrig.handle === 'ne') {
+      newY = resizeOrig.y + (resizeOrig.height - newHeight);
+    }
+  } else {
+    if (resizeOrig.handle === 'e') {
+      newWidth = resizeOrig.width + dx;
+    } else if (resizeOrig.handle === 'w') {
+      newWidth = resizeOrig.width - dx;
+      newX = resizeOrig.x + dx;
+    } else if (resizeOrig.handle === 's') {
+      newHeight = resizeOrig.height + dy;
+    } else if (resizeOrig.handle === 'n') {
+      newHeight = resizeOrig.height - dy;
+      newY = resizeOrig.y + dy;
+    }
+
+    if (newWidth < minSize) {
+      const diff = minSize - newWidth;
+      if (resizeOrig.handle === 'w') {
+        newX -= diff;
+      }
+      newWidth = minSize;
+    }
+    if (newHeight < minSize) {
+      const diff = minSize - newHeight;
+      if (resizeOrig.handle === 'n') {
+        newY -= diff;
+      }
+      newHeight = minSize;
     }
   }
-};
-document.onmouseup = function() {
+
+  if (newX < 0) {
+    newWidth += newX;
+    newX = 0;
+  }
+  if (newY < 0) {
+    newHeight += newY;
+    newY = 0;
+  }
+  if (newX + newWidth > pageWidth) {
+    newWidth = pageWidth - newX;
+  }
+  if (newY + newHeight > pageHeight) {
+    newHeight = pageHeight - newY;
+  }
+
+  if (newWidth < minSize) newWidth = minSize;
+  if (newHeight < minSize) newHeight = minSize;
+
+  photo.width = newWidth;
+  photo.height = newHeight;
+  photo.x = newX;
+  photo.y = newY;
+
+  render();
+});
+
+document.addEventListener('mouseup', function() {
   resizing = false;
   resizePhotoIdx = null;
   resizeStart = null;
@@ -380,23 +409,7 @@ document.onmouseup = function() {
   dragging = false;
   dragIdx = null;
   dragOffset = null;
-};
-function startResize(e, idx) {
-  e.stopPropagation();
-  resizing = true;
-  resizePhotoIdx = idx;
-  resizeStart = { x: e.pageX, y: e.pageY };
-  const photo = pages[currentPage].photos[idx];
-    resizeOrig = {
-      width: photo.width,
-      height: photo.height,
-      x: photo.x,
-      y: photo.y,
-      handle: e.target.getAttribute('data-handle'),
-      startX: e.pageX,
-      startY: e.pageY,
-      dominant: null
-    };
-}
+});
 
+// Initial render
 render();
