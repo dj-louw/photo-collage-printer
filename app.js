@@ -69,9 +69,9 @@ function renderCollagePage() {
 
   page.photos.forEach((photo, idx) => {
     // Container: positions the photo on the page and
-    // carries the selection frame/border.
+    // carries the selection frame/border (only when selected).
     const container = document.createElement('div');
-    container.className = 'photo-container';
+    container.className = 'photo-container' + (selectedPhoto === idx ? ' selected' : '');
     container.style.position = 'absolute';
     container.style.left = photo.x + 'px';
     container.style.top = photo.y + 'px';
@@ -124,6 +124,10 @@ function renderCollagePage() {
       const rotateIcon = document.createElement('img');
       rotateIcon.src = 'icons/file-rotate-right.svg';
       rotateIcon.alt = 'Rotate';
+      // Do not include this icon when capturing the
+      // collage for PDF; external file:// images can
+      // taint the canvas in some browsers.
+      rotateIcon.setAttribute('data-html2canvas-ignore', 'true');
       rotateIcon.style.position = 'absolute';
       rotateIcon.style.left = '-24px';
       rotateIcon.style.top = '-24px';
@@ -203,8 +207,45 @@ window.importPhoto = function(event) {
   reader.readAsDataURL(file);
 };
 
-window.printCollage = function() {
-  window.print();
+window.printCollage = async function() {
+  const pageEl = document.querySelector('.collage-page');
+  if (!pageEl || !window.jspdf || !window.html2canvas) {
+    // Fallback to normal print if libraries are unavailable
+    window.print();
+    return;
+  }
+
+  const { jsPDF } = window.jspdf;
+
+  // Temporarily hide selection chrome while capturing
+  document.body.classList.add('printing-pdf');
+
+  // Render the collage page to a high-resolution canvas
+  const canvas = await window.html2canvas(pageEl, { scale: 2 });
+  const imgData = canvas.toDataURL('image/png');
+
+  // Create a PDF sized to A4 by default (portrait)
+  const pdf = new jsPDF('portrait', 'mm', 'a4');
+  const pdfWidth = pdf.internal.pageSize.getWidth();
+  const pdfHeight = pdf.internal.pageSize.getHeight();
+
+  const imgWidth = canvas.width;
+  const imgHeight = canvas.height;
+  const ratio = Math.min(pdfWidth / imgWidth, pdfHeight / imgHeight);
+  const renderWidth = imgWidth * ratio;
+  const renderHeight = imgHeight * ratio;
+  const x = (pdfWidth - renderWidth) / 2;
+  const y = (pdfHeight - renderHeight) / 2;
+
+  pdf.addImage(imgData, 'PNG', x, y, renderWidth, renderHeight);
+
+  // Download the PDF so the user can open/print it
+  // from their PDF viewer, avoiding browser security
+  // restrictions around blob URLs on file:// origins.
+  pdf.save('collage.pdf');
+
+  // Restore normal view
+  document.body.classList.remove('printing-pdf');
 };
 
 // Selection helper

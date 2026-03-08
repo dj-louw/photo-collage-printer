@@ -32,12 +32,16 @@ body {
   cursor: move;
 }
 
-/* Unrotated photo container that defines the selection frame. */
+/* Unrotated photo container; only selected ones get a blue frame. */
 .photo-container {
   position: absolute;
-  border: 2px solid #0078d4;
   border-radius: 4px;
   box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+}
+
+/* Use outline so selection doesn’t change layout/size. */
+.photo-container.selected {
+  outline: 2px solid #0078d4;
 }
 
 .resize-handle {
@@ -47,11 +51,70 @@ body {
   pointer-events: auto;
 }
 
+/* When capturing to PDF, suppress outlines and handles. */
+body.printing-pdf .photo-container {
+  border: none;
+  box-shadow: none;
+  outline: none;
+}
+
+body.printing-pdf .resize-handle {
+  display: none !important;
+}
+
 @media (max-width: 600px) {
   #app {
     padding: 8px;
   }
   .collage-page {
     min-height: 400px;
+  }
+}
+
+/* Print: only show the collage page */
+@media print {
+  /* Hide everything by default */
+  body * {
+    visibility: hidden;
+  }
+
+  /* Show only the collage page and its contents */
+  .collage-page, .collage-page * {
+    visibility: visible;
+  }
+
+  /* Position collage page at top-left for printing */
+  .collage-page {
+    position: absolute;
+    left: 0;
+    top: 0;
+    margin: 0;
+    border: none;
+    box-shadow: none;
+    background: #ffffff;
+  }
+
+  /* Remove outer chrome */
+  body {
+    margin: 0;
+    background: #ffffff;
+  }
+  #app {
+    margin: 0;
+    padding: 0;
+    box-shadow: none;
+    border-radius: 0;
+    background: transparent;
+  }
+
+  /* Do not print selection outlines or resize handles */
+  .photo-container {
+  border: none;
+  box-shadow: none;
+  outline: none;
+  }
+
+  .resize-handle {
+    display: none !important;
   }
 }
