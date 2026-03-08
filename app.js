@@ -68,8 +68,10 @@ function renderCollagePage() {
   div.style.height = pageHeightPx + 'px';
 
   page.photos.forEach((photo, idx) => {
-    // Unrotated container: positions the photo on the page
+    // Container: positions the photo on the page and
+    // carries the selection frame/border.
     const container = document.createElement('div');
+    container.className = 'photo-container';
     container.style.position = 'absolute';
     container.style.left = photo.x + 'px';
     container.style.top = photo.y + 'px';
@@ -78,27 +80,18 @@ function renderCollagePage() {
     container.style.pointerEvents = 'auto';
     container.dataset.photoIndex = String(idx);
 
-    // Rotated wrapper: rotates image + resize handles around center
-    const rotateWrapper = document.createElement('div');
-    rotateWrapper.style.position = 'absolute';
-    rotateWrapper.style.left = '0';
-    rotateWrapper.style.top = '0';
-    rotateWrapper.style.width = '100%';
-    rotateWrapper.style.height = '100%';
-    rotateWrapper.style.transformOrigin = 'center center';
-    rotateWrapper.style.transform = `rotate(${photo.rotation || 0}deg)`;
-
     const img = document.createElement('img');
     img.src = photo.src;
     img.className = 'photo';
     img.style.width = '100%';
     img.style.height = '100%';
+    // Keep full image visible inside the bounding box.
     img.style.objectFit = 'contain';
     img.onclick = e => {
       e.stopPropagation();
       selectPhoto(idx);
     };
-    rotateWrapper.appendChild(img);
+    container.appendChild(img);
 
     // Show resize handles if selected
     if (selectedPhoto === idx) {
@@ -106,11 +99,7 @@ function renderCollagePage() {
         { name: 'nw', left: '-8px', top: '-8px', cursor: 'nwse-resize' },
         { name: 'ne', right: '-8px', top: '-8px', cursor: 'nesw-resize' },
         { name: 'sw', left: '-8px', bottom: '-8px', cursor: 'nesw-resize' },
-        { name: 'se', right: '-8px', bottom: '-8px', cursor: 'nwse-resize' },
-        { name: 'n', left: '50%', top: '-8px', cursor: 'ns-resize', transform: 'translateX(-50%)' },
-        { name: 's', left: '50%', bottom: '-8px', cursor: 'ns-resize', transform: 'translateX(-50%)' },
-        { name: 'w', left: '-8px', top: '50%', cursor: 'ew-resize', transform: 'translateY(-50%)' },
-        { name: 'e', right: '-8px', top: '50%', cursor: 'ew-resize', transform: 'translateY(-50%)' }
+        { name: 'se', right: '-8px', bottom: '-8px', cursor: 'nwse-resize' }
       ];
       handlePositions.forEach(pos => {
         const handle = document.createElement('div');
@@ -128,7 +117,7 @@ function renderCollagePage() {
         handle.style.cursor = pos.cursor;
         handle.setAttribute('data-handle', pos.name);
         handle.onmousedown = e => startResize(e, idx, pos.name);
-        rotateWrapper.appendChild(handle);
+        container.appendChild(handle);
       });
 
       // Rotate icon: stays at top-left of unrotated bounding box
@@ -151,7 +140,6 @@ function renderCollagePage() {
       container.appendChild(rotateIcon);
     }
 
-    container.appendChild(rotateWrapper);
     div.appendChild(container);
   });
 
@@ -225,12 +213,58 @@ function selectPhoto(idx) {
   render();
 }
 
-// Rotate photo by 90 degrees clockwise
+// Rotate photo by 90 degrees clockwise by redrawing the bitmap.
+// This avoids CSS transform artefacts like letterboxing/cropping
+// because the underlying image data itself is rotated.
 function rotatePhoto(idx) {
-  const photo = pages[currentPage].photos[idx];
-  const current = photo.rotation || 0;
-  photo.rotation = (current + 90) % 360;
-  render();
+  const page = pages[currentPage];
+  const photo = page.photos[idx];
+
+  const img = new Image();
+  img.onload = function() {
+    // Create a canvas with swapped dimensions for 90° rotation
+    const canvas = document.createElement('canvas');
+    canvas.width = img.height;
+    canvas.height = img.width;
+    const ctx = canvas.getContext('2d');
+
+    // Rotate around the canvas center and draw the image
+    ctx.translate(canvas.width / 2, canvas.height / 2);
+    ctx.rotate(Math.PI / 2); // 90 degrees clockwise
+    ctx.drawImage(img, -img.width / 2, -img.height / 2);
+
+    const newSrc = canvas.toDataURL('image/png');
+
+    // Swap the displayed bounding box dimensions while
+    // keeping the visual center roughly the same.
+    const oldWidth = photo.width;
+    const oldHeight = photo.height;
+    const centerX = photo.x + oldWidth / 2;
+    const centerY = photo.y + oldHeight / 2;
+
+    const newWidth = oldHeight;
+    const newHeight = oldWidth;
+    let newX = centerX - newWidth / 2;
+    let newY = centerY - newHeight / 2;
+
+    const pageWidth = page.size.width * 3;
+    const pageHeight = page.size.height * 3;
+
+    if (newX < 0) newX = 0;
+    if (newY < 0) newY = 0;
+    if (newX + newWidth > pageWidth) newX = pageWidth - newWidth;
+    if (newY + newHeight > pageHeight) newY = pageHeight - newHeight;
+
+    photo.src = newSrc;
+    photo.width = newWidth;
+    photo.height = newHeight;
+    photo.x = newX;
+    photo.y = newY;
+
+    render();
+  };
+
+  img.src = photo.src;
 }
 
 // Expose rotation for any global handlers (defensive)
@@ -329,12 +363,18 @@ document.addEventListener('mousemove', function(e) {
     }
 
     if (resizeOrig.dominant === 'width') {
-      let targetWidth = resizeOrig.width + (resizeOrig.handle === 'sw' || resizeOrig.handle === 'nw' ? -widthChange : widthChange);
+      // For all corners, widthChange is defined so that
+      // dragging the handle outward (away from the image)
+      // produces a positive change. We can therefore
+      // apply it directly.
+      let targetWidth = resizeOrig.width + widthChange;
       if (targetWidth < minSize) targetWidth = minSize;
       newWidth = targetWidth;
       newHeight = newWidth / aspect;
     } else {
-      let targetHeight = resizeOrig.height + (resizeOrig.handle === 'ne' || resizeOrig.handle === 'nw' ? -heightChange : heightChange);
+      // Same idea for height: heightChange already has
+      // the correct sign for the corner being dragged.
+      let targetHeight = resizeOrig.height + heightChange;
       if (targetHeight < minSize) targetHeight = minSize;
       newHeight = targetHeight;
       newWidth = newHeight * aspect;
