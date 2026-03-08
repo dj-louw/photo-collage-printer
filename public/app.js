@@ -66,10 +66,10 @@ function renderCollagePage() {
     img.className = 'photo';
     img.style.width = '100%';
     img.style.height = '100%';
-    img.draggable = true;
-    img.ondragstart = e => dragPhoto(e, idx);
-    img.ondragend = e => dropPhoto(e, idx);
-    img.onclick = () => selectPhoto(idx);
+    img.onclick = e => {
+      e.stopPropagation();
+      selectPhoto(idx);
+    };
     container.appendChild(img);
 
     // Show resize handles on corners and edges if selected
@@ -102,6 +102,26 @@ function renderCollagePage() {
         handle.onmousedown = e => startResize(e, idx, pos.name);
         container.appendChild(handle);
       });
+    }
+    // Add rotate icon for selected image
+    if (selectedPhoto === idx) {
+      const rotateIcon = document.createElement('img');
+      rotateIcon.src = 'icons/file-rotate-right.svg';
+      rotateIcon.alt = 'Rotate';
+      rotateIcon.style.position = 'absolute';
+      rotateIcon.style.left = '-24px';
+      rotateIcon.style.top = '-24px';
+      rotateIcon.style.width = '24px';
+      rotateIcon.style.height = '24px';
+      rotateIcon.style.background = 'white';
+      rotateIcon.style.borderRadius = '50%';
+      rotateIcon.style.boxShadow = '0 1px 4px rgba(0,0,0,0.15)';
+      rotateIcon.style.cursor = 'pointer';
+      rotateIcon.onclick = function(e) {
+        e.stopPropagation();
+        rotatePhoto(idx);
+      };
+      container.appendChild(rotateIcon);
     }
     div.appendChild(container);
   });
@@ -162,20 +182,74 @@ window.printCollage = function() {
   window.print();
 };
 
-// Drag and drop (basic)
+// Drag and drop (custom)
 let dragIdx = null;
-function dragPhoto(e, idx) {
-  dragIdx = idx;
-}
-function dropPhoto(e, idx) {
-  if (dragIdx !== null) {
+let dragOffset = null;
+let dragging = false;
+
+document.onmousedown = function(e) {
+  // Only start drag if clicking on an image
+  if (e.target.classList && e.target.classList.contains('photo')) {
+    const idx = Array.from(e.target.parentElement.parentElement.children).indexOf(e.target.parentElement);
+    dragIdx = idx;
+    dragging = true;
+    const photo = pages[currentPage].photos[idx];
+    dragOffset = {
+      x: e.pageX - app.offsetLeft - photo.x,
+      y: e.pageY - app.offsetTop - photo.y
+    };
+    e.preventDefault();
+  }
+};
+
+document.onmousemove = function(e) {
+  if (dragging && dragIdx !== null) {
     const photo = pages[currentPage].photos[dragIdx];
-    photo.x = e.pageX - app.offsetLeft - 50;
-    photo.y = e.pageY - app.offsetTop - 50;
-    dragIdx = null;
+    let newX = e.pageX - app.offsetLeft - dragOffset.x;
+    let newY = e.pageY - app.offsetTop - dragOffset.y;
+    const pageWidth = pages[currentPage].size.width * 3;
+    const pageHeight = pages[currentPage].size.height * 3;
+    newX = Math.max(0, Math.min(newX, pageWidth - photo.width));
+    newY = Math.max(0, Math.min(newY, pageHeight - photo.height));
+    photo.x = newX;
+    photo.y = newY;
     render();
   }
-}
+};
+
+document.onmouseup = function() {
+  resizing = false;
+  resizePhotoIdx = null;
+  resizeStart = null;
+  resizeOrig = null;
+  dragging = false;
+  dragIdx = null;
+  dragOffset = null;
+};
+window.addEventListener('mouseup', function() {
+  resizing = false;
+  resizePhotoIdx = null;
+  resizeStart = null;
+  resizeOrig = null;
+  dragging = false;
+  dragIdx = null;
+  dragOffset = null;
+});
+
+window.addEventListener('mousemove', function(e) {
+  if (dragging && dragIdx !== null) {
+    const photo = pages[currentPage].photos[dragIdx];
+    let newX = e.pageX - app.offsetLeft - dragOffset.x;
+    let newY = e.pageY - app.offsetTop - dragOffset.y;
+    const pageWidth = pages[currentPage].size.width * 3;
+    const pageHeight = pages[currentPage].size.height * 3;
+    newX = Math.max(0, Math.min(newX, pageWidth - photo.width));
+    newY = Math.max(0, Math.min(newY, pageHeight - photo.height));
+    photo.x = newX;
+    photo.y = newY;
+    render();
+  }
+});
 
 let selectedPhoto = null;
 function selectPhoto(idx) {
@@ -197,6 +271,8 @@ document.onmousemove = function(e) {
     let newX = photo.x;
     let newY = photo.y;
     const handle = resizeOrig.handle;
+    const pageWidth = pages[currentPage].size.width * 3;
+    const pageHeight = pages[currentPage].size.height * 3;
     if (["nw","ne","sw","se"].includes(handle)) {
       // Corners: always lock aspect ratio
       let widthChange = 0, heightChange = 0;
@@ -234,6 +310,25 @@ document.onmousemove = function(e) {
       } else if (handle === "sw") {
         newX = resizeOrig.x + (resizeOrig.width - newWidth);
       }
+      // Stop resizing if any edge hits the page border
+      if (newX < 0) {
+        newWidth += newX;
+        newHeight = newWidth / aspect;
+        newX = 0;
+      }
+      if (newY < 0) {
+        newHeight += newY;
+        newWidth = newHeight * aspect;
+        newY = 0;
+      }
+      if (newX + newWidth > pageWidth) {
+        newWidth = pageWidth - newX;
+        newHeight = newWidth / aspect;
+      }
+      if (newY + newHeight > pageHeight) {
+        newHeight = pageHeight - newY;
+        newWidth = newHeight * aspect;
+      }
     } else {
       // Edges: allow stretching (break aspect ratio)
       if (handle === "n") {
@@ -247,7 +342,27 @@ document.onmousemove = function(e) {
       } else if (handle === "e") {
         newWidth += dx;
       }
+      // Clamp position and size for edge handles
+      newWidth = Math.max(20, newWidth);
+      newHeight = Math.max(20, newHeight);
+      if (newX < 0) {
+        newWidth += newX;
+        newX = 0;
+      }
+      if (newY < 0) {
+        newHeight += newY;
+        newY = 0;
+      }
+      if (newX + newWidth > pageWidth) {
+        newWidth = pageWidth - newX;
+      }
+      if (newY + newHeight > pageHeight) {
+        newHeight = pageHeight - newY;
+      }
     }
+    // Minimum size
+    newWidth = Math.max(20, newWidth);
+    newHeight = Math.max(20, newHeight);
     if (newWidth > 20 && newHeight > 20) {
       photo.width = newWidth;
       photo.height = newHeight;
@@ -262,6 +377,9 @@ document.onmouseup = function() {
   resizePhotoIdx = null;
   resizeStart = null;
   resizeOrig = null;
+  dragging = false;
+  dragIdx = null;
+  dragOffset = null;
 };
 function startResize(e, idx) {
   e.stopPropagation();
