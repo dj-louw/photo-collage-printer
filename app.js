@@ -518,48 +518,70 @@ window.changePageSize = function(size) {
 function applyCropAspectPreset(photo, page, mode) {
   if (!photo || !page) return;
 
-  let targetWidth = photo.width;
-  let targetHeight = photo.height;
+  const pxPerMm = 3;
+  let desiredWidth = photo.width;
+  let desiredHeight = photo.height;
 
   if (mode === '4:3') {
-    // Keep current height, adjust width to 4:3.
-    targetHeight = photo.height;
-    targetWidth = (photo.height * 4) / 3;
+    // Landscape: 150mm × 100mm
+    desiredWidth = 150 * pxPerMm;  // 150mm wide
+    desiredHeight = 100 * pxPerMm; // 100mm tall
   } else if (mode === '3:4') {
-    // Keep current width, adjust height to 3:4.
-    targetWidth = photo.width;
-    targetHeight = (photo.width * 4) / 3;
+    // Portrait: 100mm × 150mm
+    desiredWidth = 100 * pxPerMm;  // 100mm wide
+    desiredHeight = 150 * pxPerMm; // 150mm tall
   } else if (mode === '1:1') {
-    // Keep current height, make width equal to height.
-    targetHeight = photo.height;
-    targetWidth = photo.height;
+    // Square: keep roughly the current box size but enforce 1:1.
+    const side = Math.min(photo.width, photo.height);
+    desiredWidth = side;
+    desiredHeight = side;
   }
 
-  // Clamp to page bounds (grow/shrink to the right/bottom).
-  const pageWidth = page.size.width * 3;
-  const pageHeight = page.size.height * 3;
+  if (desiredWidth <= 0 || desiredHeight <= 0) return;
 
-  if (photo.x + targetWidth > pageWidth) {
-    targetWidth = Math.max(20, pageWidth - photo.x);
-  }
-  if (photo.y + targetHeight > pageHeight) {
-    targetHeight = Math.max(20, pageHeight - photo.y);
-  }
+  const pageWidth = page.size.width * pxPerMm;
+  const pageHeight = page.size.height * pxPerMm;
 
-  // Ensure the crop box stays within the underlying image.
-  const maxWidth = (photo.imageWidth || targetWidth) + (photo.imageOffsetX || 0);
-  const maxHeight = (photo.imageHeight || targetHeight) + (photo.imageOffsetY || 0);
+  // Compute a uniform scale so the desired box fits within
+  // the page. The crop box may extend beyond the image.
+  let scale = 1;
+  scale = Math.min(
+    scale,
+    pageWidth / desiredWidth,
+    pageHeight / desiredHeight
+  );
 
-  if (targetWidth > maxWidth) {
-    targetWidth = maxWidth;
-  }
-  if (targetHeight > maxHeight) {
-    targetHeight = maxHeight;
+  if (!Number.isFinite(scale) || scale <= 0) {
+    scale = 1;
   }
 
-  // Apply the new dimensions; top-left stays anchored.
-  photo.width = Math.max(20, targetWidth);
-  photo.height = Math.max(20, targetHeight);
+  let targetWidth = desiredWidth * scale;
+  let targetHeight = desiredHeight * scale;
+
+  const minSize = 20;
+  if (targetWidth < minSize || targetHeight < minSize) {
+    const upScale = Math.max(minSize / targetWidth, minSize / targetHeight);
+    targetWidth *= upScale;
+    targetHeight *= upScale;
+  }
+
+  // Position the new crop box roughly around the previous
+  // visual centre, then clamp it inside the page.
+  const oldCenterX = photo.x + photo.width / 2;
+  const oldCenterY = photo.y + photo.height / 2;
+
+  let newX = oldCenterX - targetWidth / 2;
+  let newY = oldCenterY - targetHeight / 2;
+
+  if (newX < 0) newX = 0;
+  if (newY < 0) newY = 0;
+  if (newX + targetWidth > pageWidth) newX = pageWidth - targetWidth;
+  if (newY + targetHeight > pageHeight) newY = pageHeight - targetHeight;
+
+  photo.x = newX;
+  photo.y = newY;
+  photo.width = targetWidth;
+  photo.height = targetHeight;
 }
 
 // Photo controls
@@ -957,17 +979,12 @@ document.addEventListener('mousemove', function(e) {
       scale = (resizeOrig.imageHeight + heightChange) / resizeOrig.imageHeight;
     }
 
-    // Prevent flipping or extreme shrinking
+    // Prevent flipping or collapsing to zero, but no longer
+    // force the image to fully cover the crop box – it may
+    // be scaled smaller than the mask if the user zooms out.
     if (!Number.isFinite(scale) || scale <= 0) {
       scale = 0.01;
     }
-
-    // Ensure the image always covers the mask
-    const minScale = Math.max(
-      photo.width / resizeOrig.imageWidth,
-      photo.height / resizeOrig.imageHeight
-    );
-    if (scale < minScale) scale = minScale;
 
     newImageWidth = resizeOrig.imageWidth * scale;
     newImageHeight = resizeOrig.imageHeight * scale;
@@ -995,7 +1012,7 @@ document.addEventListener('mousemove', function(e) {
       newOffsetY = bottom - newImageHeight;
     }
 
-    // Clamp offsets so the image still fully covers the mask
+    // Clamp offsets so the image stays positioned sensibly
     const minOffsetX = Math.min(0, photo.width - newImageWidth);
     const maxOffsetX = 0;
     const minOffsetY = Math.min(0, photo.height - newImageHeight);
@@ -1117,25 +1134,6 @@ document.addEventListener('mousemove', function(e) {
 
     if (newWidth < minSize) newWidth = minSize;
     if (newHeight < minSize) newHeight = minSize;
-
-    // Ensure the mask never extends beyond the underlying image
-    const maxWidth = resizeOrig.imageWidth + resizeOrig.imageOffsetX;
-    const maxHeight = resizeOrig.imageHeight + resizeOrig.imageOffsetY;
-
-    if (newWidth > maxWidth) {
-      const diff = newWidth - maxWidth;
-      if (handle === 'w') {
-        newX += diff;
-      }
-      newWidth = maxWidth;
-    }
-    if (newHeight > maxHeight) {
-      const diff = newHeight - maxHeight;
-      if (handle === 'n') {
-        newY += diff;
-      }
-      newHeight = maxHeight;
-    }
 
     photo.width = newWidth;
     photo.height = newHeight;
