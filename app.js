@@ -45,6 +45,69 @@ let cropImageOrigOffset = null;
 let settingsOpen = false;
 let helpOpen = false;
 
+// Load three sample photos onto the first page when the
+// app starts, so new users see an example layout.
+function loadInitialSamplePhotos() {
+  const page = pages[0];
+  if (!page || page.photos.length > 0) return;
+
+  const sources = [
+    'sample-photos/family-photo-1.jpg',
+    'sample-photos/family-photo-2.jpg',
+    'sample-photos/family-photo-3.jpg'
+  ];
+
+  const pageWidthPx = page.size.width * 3;
+  const targetWidth = pageWidthPx * 0.45; // ~45% of page width
+  const margin = 20;
+
+  sources.forEach((src, index) => {
+    const img = new Image();
+    img.onload = function() {
+      const scale = targetWidth / img.naturalWidth;
+      const width = targetWidth;
+      const height = img.naturalHeight * scale;
+
+      // Simple 2-column layout: two photos on the top row,
+      // one centred below.
+      let x;
+      let y;
+      if (index === 0) {
+        x = margin;
+        y = margin;
+      } else if (index === 1) {
+        x = pageWidthPx - margin - width;
+        y = margin;
+      } else {
+        x = (pageWidthPx - width) / 2;
+        y = margin + height + margin;
+      }
+
+      page.photos.push({
+        src,
+        x,
+        y,
+        width,
+        height,
+        rotation: 0,
+        imageWidth: width,
+        imageHeight: height,
+        imageOffsetX: 0,
+        imageOffsetY: 0
+      });
+
+      // Make family-photo-1 selected by default once it
+      // has loaded and been added to the page.
+      if (src.indexOf('family-photo-1') !== -1) {
+        selectedPhoto = page.photos.length - 1;
+      }
+
+      render();
+    };
+    img.src = src;
+  });
+}
+
 function render() {
   app.innerHTML = '';
   renderPageControls();
@@ -1256,6 +1319,20 @@ function rotatePhoto(idx) {
   const page = pages[currentPage];
   const photo = page.photos[idx];
 
+   // When the app is opened directly from the file system
+   // (file://) and a photo comes from a local path rather
+   // than a data: URL, browsers will treat the canvas as
+   // "tainted" and throw a security error when we call
+   // toDataURL. In that case, bail out gracefully and
+   // explain how to enable rotation.
+   if (location.protocol === 'file:' && !/^data:/i.test(photo.src)) {
+     if (!window.__rotationFileWarningShown) {
+       window.__rotationFileWarningShown = true;
+       alert('To rotate the built-in sample photos, please open this app via a local web server (http://…) or import the images using the Add Photo button. Browsers block rotating file:// images for security reasons.');
+     }
+     return;
+   }
+
   // Ensure image presentation fields exist
   if (photo.imageWidth == null || photo.imageHeight == null) {
     photo.imageWidth = photo.width;
@@ -1315,7 +1392,13 @@ function rotatePhoto(idx) {
     ctx.rotate(Math.PI / 2); // 90 degrees clockwise
     ctx.drawImage(img, -img.width / 2, -img.height / 2);
 
-    const newSrc = canvas.toDataURL('image/png');
+    let newSrc;
+    try {
+      newSrc = canvas.toDataURL('image/png');
+    } catch (err) {
+      console.warn('Unable to rotate image due to browser security restrictions.', err);
+      return;
+    }
 
     // New drawn image size keeps the same zoom level
     const newImageWidth = imgH * scale;
@@ -1851,5 +1934,6 @@ document.addEventListener('mouseup', function() {
   }
 });
 
-// Initial render
+// Initial render with sample photos on the first page
+loadInitialSamplePhotos();
 render();

@@ -79,11 +79,16 @@ body {
 /* Use outline so selection doesn’t change layout/size. */
 .photo-container.selected {
   outline: 2px solid #0078d4;
+  /* Ensure the selected photo and its controls (including
+     size readout) sit above other photos. */
+  z-index: 20;
 }
 
 /* Active crop target sits above the dimming overlay */
 .photo-container.cropping-active {
-  z-index: 10;
+  /* Crop mode should sit even higher than a normal
+     selection to keep its frame and handles clear. */
+  z-index: 30;
 }
 /* Inner mask used for cropping; clips only the image. */
 .photo-mask {
