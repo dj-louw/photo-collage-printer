@@ -81,6 +81,10 @@ body {
   border: 1px solid #0078d4;
 }
 
+.photo-size-info {
+  font-family: inherit;
+}
+
 /* When a photo is in crop mode, make the crop toggle
    button stand out with a thicker blue border. */
 .photo-container.cropping-active .crop-toggle {
@@ -98,6 +102,10 @@ body.printing-pdf .photo-container {
 }
 
 body.printing-pdf .resize-handle {
+  display: none !important;
+}
+
+body.printing-pdf .photo-size-info {
   display: none !important;
 }
 
@@ -161,6 +169,10 @@ body.printing-pdf .resize-handle {
   }
 
   .resize-handle {
+    display: none !important;
+  }
+
+  .photo-size-info {
     display: none !important;
   }
 

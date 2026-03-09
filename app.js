@@ -371,6 +371,46 @@ function renderCollagePage() {
       cropButton.appendChild(cropIcon);
 
       container.appendChild(cropButton);
+
+      // Size readout: aspect ratio and physical dimensions
+      // for the visible crop box, shown on the right edge
+      // of the selected image.
+      const wPx = Math.max(1, photo.width);
+      const hPx = Math.max(1, photo.height);
+      const wInt = Math.round(wPx);
+      const hInt = Math.round(hPx);
+      const gcd = (a, b) => (b === 0 ? a : gcd(b, a % b));
+      const g = gcd(wInt, hInt) || 1;
+      const arW = Math.round(wInt / g);
+      const arH = Math.round(hInt / g);
+      const mmWidth = wPx / 3;  // 3 px per mm
+      const mmHeight = hPx / 3;
+
+      const info = document.createElement('div');
+      info.className = 'photo-size-info';
+      info.setAttribute('data-html2canvas-ignore', 'true');
+      info.style.position = 'absolute';
+      info.style.left = '100%';
+      info.style.top = '0';
+      info.style.marginLeft = '8px';
+      info.style.fontSize = '11px';
+      info.style.lineHeight = '1.2';
+      info.style.color = '#333';
+      info.style.background = 'rgba(255, 255, 255, 0.9)';
+      info.style.padding = '2px 4px';
+      info.style.borderRadius = '3px';
+      info.style.whiteSpace = 'nowrap';
+      info.style.pointerEvents = 'none';
+
+      const aspectLine = document.createElement('div');
+      aspectLine.textContent = arW + ' : ' + arH;
+      const sizeLine = document.createElement('div');
+      sizeLine.textContent =
+        mmWidth.toFixed(1) + ' × ' + mmHeight.toFixed(1) + ' mm';
+
+      info.appendChild(aspectLine);
+      info.appendChild(sizeLine);
+      container.appendChild(info);
     }
 
     div.appendChild(container);
