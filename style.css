@@ -28,6 +28,9 @@ body {
      page border; JS still constrains photo containers
      themselves to the page bounds. */
   overflow: visible;
+  /* Stack pages vertically and centre them in the
+     workspace, with some breathing room between. */
+  margin: 0 auto 24px auto;
 }
 
 
@@ -121,15 +124,20 @@ body.printing-pdf .resize-handle {
     visibility: visible;
   }
 
-  /* Position collage page at top-left for printing */
+  /* Stack all collage pages vertically and put each
+     on its own printed sheet, similar to a document
+     editor. */
   .collage-page {
-    position: absolute;
-    left: 0;
-    top: 0;
-    margin: 0;
+    position: static;
+    margin: 0 auto;
     border: none;
     box-shadow: none;
     background: #ffffff;
+    page-break-after: always;
+  }
+
+  .collage-page:last-of-type {
+    page-break-after: auto;
   }
 
   /* Remove outer chrome */

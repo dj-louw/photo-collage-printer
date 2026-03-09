@@ -44,13 +44,16 @@ function render() {
 function renderPageControls() {
   const div = document.createElement('div');
   div.className = 'page-controls';
+  const page = pages[currentPage];
+  const isLetter = page.size.width === 216 && page.size.height === 279;
+  const currentSizeValue = isLetter ? 'Letter' : 'A4';
   div.innerHTML = `
     <button onclick="addPage()">Add Page</button>
     <button onclick="removePage()">Remove Page</button>
     <label>Page Size:
       <select onchange="changePageSize(this.value)">
-        <option value="A4">A4</option>
-        <option value="Letter">Letter</option>
+        <option value="A4" ${currentSizeValue === 'A4' ? 'selected' : ''}>A4</option>
+        <option value="Letter" ${currentSizeValue === 'Letter' ? 'selected' : ''}>Letter</option>
       </select>
     </label>
     <span>Page ${currentPage + 1} of ${pages.length}</span>
@@ -69,27 +72,35 @@ function renderPhotoControls() {
 }
 
 function renderCollagePage() {
-  const page = pages[currentPage];
-  const div = document.createElement('div');
-  div.className = 'collage-page';
-  const pageWidthPx = page.size.width * 3;
-  const pageHeightPx = page.size.height * 3;
-  div.style.width = pageWidthPx + 'px';
-  div.style.height = pageHeightPx + 'px';
+  // Render all pages vertically, like a word processor
+  // document. The currentPage index still tracks which
+  // page new photos are added to and which one the
+  // page controls refer to, but you can scroll through
+  // and interact with every page.
+  pages.forEach((page, pageIndex) => {
+    const div = document.createElement('div');
+    div.className = 'collage-page';
+    const pageWidthPx = page.size.width * 3;
+    const pageHeightPx = page.size.height * 3;
+    div.style.width = pageWidthPx + 'px';
+    div.style.height = pageHeightPx + 'px';
+    div.dataset.pageIndex = String(pageIndex);
 
-  // Clicking on empty space on the page should clear
-  // any current selection / crop mode.
-  div.addEventListener('click', e => {
-    const photoContainer = e.target.closest('.photo-container');
-    if (!photoContainer) {
-      selectedPhoto = null;
-      cropMode = false;
-      cropPhotoIdx = null;
-      render();
-    }
-  });
+    // Clicking on empty space on a page clears any
+    // current selection/crop and makes that page the
+    // active one for subsequent operations.
+    div.addEventListener('click', e => {
+      const photoContainer = e.target.closest('.photo-container');
+      if (!photoContainer) {
+        currentPage = pageIndex;
+        selectedPhoto = null;
+        cropMode = false;
+        cropPhotoIdx = null;
+        render();
+      }
+    });
 
-  page.photos.forEach((photo, idx) => {
+    page.photos.forEach((photo, idx) => {
     // Backwards compatibility: ensure new image fields exist
     if (photo.imageWidth == null || photo.imageHeight == null) {
       photo.imageWidth = photo.width;
@@ -99,11 +110,14 @@ function renderCollagePage() {
     }
 
     // Container: positions the photo on the page and
-    // carries the selection frame/border (only when selected).
+    // carries the selection frame/border (only when
+    // the photo on the active page is selected).
     const container = document.createElement('div');
     const classes = ['photo-container'];
-    if (selectedPhoto === idx) classes.push('selected');
-    if (cropMode && cropPhotoIdx === idx) classes.push('cropping-active');
+    const isOnActivePage = pageIndex === currentPage;
+    const isSelectedOnActivePage = isOnActivePage && selectedPhoto === idx;
+    if (isSelectedOnActivePage) classes.push('selected');
+    if (cropMode && isOnActivePage && cropPhotoIdx === idx) classes.push('cropping-active');
     container.className = classes.join(' ');
     container.style.position = 'absolute';
     container.style.left = photo.x + 'px';
@@ -111,6 +125,7 @@ function renderCollagePage() {
     container.style.width = photo.width + 'px';
     container.style.height = photo.height + 'px';
     container.style.pointerEvents = 'auto';
+    container.dataset.pageIndex = String(pageIndex);
     container.dataset.photoIndex = String(idx);
 
     // Inner mask wrapper: clips only the image, not the
@@ -136,14 +151,15 @@ function renderCollagePage() {
     img.style.height = photo.imageHeight + 'px';
     img.onclick = e => {
       e.stopPropagation();
-      selectPhoto(idx);
+      selectPhoto(pageIndex, idx);
     };
 
     mask.appendChild(img);
     container.appendChild(mask);
 
-    // Show resize/crop handles if selected
-    if (selectedPhoto === idx) {
+    // Show resize/crop handles only for the selected
+    // photo on the active page.
+    if (isSelectedOnActivePage) {
       const inCropMode = cropMode && cropPhotoIdx === idx;
 
       // In crop mode, use edge handles that move a single edge
@@ -177,7 +193,10 @@ function renderCollagePage() {
         handle.style.borderRadius = inCropMode ? '0' : '50%';
         handle.style.cursor = pos.cursor;
         handle.setAttribute('data-handle', pos.name);
-        handle.onmousedown = e => startResize(e, idx, pos.name);
+        handle.onmousedown = e => {
+          currentPage = pageIndex;
+          startResize(e, idx, pos.name);
+        };
 
         // For the non-crop resize handle, embed the same
         // arrow icon used by the image zoom handle.
@@ -255,7 +274,10 @@ function renderCollagePage() {
         imgHandle.style.borderRadius = '50%';
         imgHandle.style.cursor = 'nwse-resize';
         imgHandle.setAttribute('data-handle', 'se');
-        imgHandle.onmousedown = e => startImageResize(e, idx, 'se');
+        imgHandle.onmousedown = e => {
+          currentPage = pageIndex;
+          startImageResize(e, idx, 'se');
+        };
 
         // Center the custom resize icon inside the handle.
         const handleIcon = document.createElement('img');
@@ -296,6 +318,7 @@ function renderCollagePage() {
       rotateButton.style.cursor = 'pointer';
       rotateButton.onclick = e => {
         e.stopPropagation();
+        currentPage = pageIndex;
         rotatePhoto(idx);
       };
 
@@ -331,6 +354,7 @@ function renderCollagePage() {
       cropButton.style.cursor = 'pointer';
       cropButton.onclick = e => {
         e.stopPropagation();
+        currentPage = pageIndex;
         toggleCrop(idx);
       };
 
@@ -353,6 +377,7 @@ function renderCollagePage() {
   });
 
   app.appendChild(div);
+  });
 }
 
 // Page controls
@@ -417,8 +442,8 @@ window.importPhoto = function(event) {
 };
 
 window.printCollage = async function() {
-  const pageEl = document.querySelector('.collage-page');
-  if (!pageEl || !window.jspdf || !window.html2canvas) {
+  const pageEls = document.querySelectorAll('.collage-page');
+  if (!pageEls.length || !window.jspdf || !window.html2canvas) {
     // Fallback to normal print if libraries are unavailable
     window.print();
     return;
@@ -429,24 +454,32 @@ window.printCollage = async function() {
   // Temporarily hide selection chrome while capturing
   document.body.classList.add('printing-pdf');
 
-  // Render the collage page to a high-resolution canvas
-  const canvas = await window.html2canvas(pageEl, { scale: 2 });
-  const imgData = canvas.toDataURL('image/png');
-
   // Create a PDF sized to A4 by default (portrait)
   const pdf = new jsPDF('portrait', 'mm', 'a4');
   const pdfWidth = pdf.internal.pageSize.getWidth();
   const pdfHeight = pdf.internal.pageSize.getHeight();
 
-  const imgWidth = canvas.width;
-  const imgHeight = canvas.height;
-  const ratio = Math.min(pdfWidth / imgWidth, pdfHeight / imgHeight);
-  const renderWidth = imgWidth * ratio;
-  const renderHeight = imgHeight * ratio;
-  const x = (pdfWidth - renderWidth) / 2;
-  const y = (pdfHeight - renderHeight) / 2;
+  let firstPage = true;
+  for (let i = 0; i < pageEls.length; i++) {
+    const pageEl = pageEls[i];
+    // Render each collage page to a high-resolution canvas
+    const canvas = await window.html2canvas(pageEl, { scale: 2 });
+    const imgData = canvas.toDataURL('image/png');
 
-  pdf.addImage(imgData, 'PNG', x, y, renderWidth, renderHeight);
+    const imgWidth = canvas.width;
+    const imgHeight = canvas.height;
+    const ratio = Math.min(pdfWidth / imgWidth, pdfHeight / imgHeight);
+    const renderWidth = imgWidth * ratio;
+    const renderHeight = imgHeight * ratio;
+    const x = (pdfWidth - renderWidth) / 2;
+    const y = (pdfHeight - renderHeight) / 2;
+
+    if (!firstPage) {
+      pdf.addPage();
+    }
+    pdf.addImage(imgData, 'PNG', x, y, renderWidth, renderHeight);
+    firstPage = false;
+  }
 
   // Download the PDF so the user can open/print it
   // from their PDF viewer, avoiding browser security
@@ -458,8 +491,13 @@ window.printCollage = async function() {
 };
 
 // Selection helper
-function selectPhoto(idx) {
+function selectPhoto(pageIndex, idx) {
+  currentPage = pageIndex;
   selectedPhoto = idx;
+  // Leaving crop mode when switching selection keeps
+  // the interaction model simple across pages.
+  cropMode = false;
+  cropPhotoIdx = null;
   render();
 }
 function toggleCrop(idx) {
@@ -649,9 +687,14 @@ document.addEventListener('mousedown', function(e) {
 
   const container = e.target.closest('[data-photo-index]');
   if (!container) return;
-
+  const pageIndex = container.dataset.pageIndex ? Number(container.dataset.pageIndex) : 0;
   const idx = Number(container.dataset.photoIndex);
-  if (Number.isNaN(idx)) return;
+  if (Number.isNaN(idx) || Number.isNaN(pageIndex)) return;
+
+  // Make the page containing this photo the active page
+  // so all subsequent drag/resize logic uses the right
+  // page dimensions and photo list.
+  currentPage = pageIndex;
   const photo = pages[currentPage].photos[idx];
   // In crop mode on the active photo, dragging the image moves
   // the image under a stationary mask instead of moving the box.
