@@ -67,7 +67,7 @@ function renderPageControls() {
 
   const description = document.createElement('div');
   description.className = 'app-description';
-  description.textContent = 'Drag, crop, and size photos so every print uses the whole sheet.';
+  description.textContent = 'Add, move, crop, and size your happy snaps so every print uses the whole sheet.';
 
   div.appendChild(title);
   div.appendChild(subtitle);
