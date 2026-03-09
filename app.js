@@ -1843,9 +1843,11 @@ document.addEventListener('mouseup', function() {
 
   // Only re-render when we were actually dragging/resizing.
   // This avoids destroying other controls between mouseup
-  // and their click events (e.g. Add/Remove page buttons).
+  // and their click events (e.g. Add/Remove page buttons
+  // or re-selecting a photo). Defer the render slightly so
+  // any pending click handlers on photos can run first.
   if (hadInteraction) {
-    render();
+    setTimeout(() => render(), 0);
   }
 });
 
