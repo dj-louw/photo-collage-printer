@@ -438,6 +438,40 @@ function renderCollagePage() {
         });
       }
 
+      // Delete button: round control aligned with the
+      // bottom-left corner of the crop box. Only shown
+      // when the photo is selected.
+      const deleteButton = document.createElement('div');
+      deleteButton.className = 'resize-handle image-resize-handle';
+      deleteButton.setAttribute('data-html2canvas-ignore', 'true');
+      deleteButton.style.position = 'absolute';
+      deleteButton.style.left = '0';
+      deleteButton.style.bottom = '-40px';
+      deleteButton.style.width = '32px';
+      deleteButton.style.height = '32px';
+      deleteButton.style.background = 'white';
+      deleteButton.style.borderRadius = '50%';
+      deleteButton.style.cursor = 'pointer';
+      deleteButton.onclick = e => {
+        e.stopPropagation();
+        currentPage = pageIndex;
+        deletePhoto(pageIndex, idx);
+      };
+
+      const deleteIcon = document.createElement('img');
+      deleteIcon.src = 'icons/delete-outline.svg';
+      deleteIcon.alt = 'Delete photo';
+      deleteIcon.style.position = 'absolute';
+      deleteIcon.style.left = '50%';
+      deleteIcon.style.top = '50%';
+      deleteIcon.style.transform = 'translate(-50%, -50%)';
+      deleteIcon.style.width = '20px';
+      deleteIcon.style.height = '20px';
+      deleteIcon.style.pointerEvents = 'none';
+      deleteButton.appendChild(deleteIcon);
+
+      container.appendChild(deleteButton);
+
       // Size readout: aspect ratio and physical dimensions
       // for the visible crop box, shown on the right edge
       // of the selected image.
@@ -582,6 +616,24 @@ function applyCropAspectPreset(photo, page, mode) {
   photo.y = newY;
   photo.width = targetWidth;
   photo.height = targetHeight;
+}
+
+// Delete a photo from a specific page and clear any
+// selection/crop state on that page.
+function deletePhoto(pageIndex, idx) {
+  const page = pages[pageIndex];
+  if (!page) return;
+  if (idx < 0 || idx >= page.photos.length) return;
+
+  page.photos.splice(idx, 1);
+
+  if (pageIndex === currentPage) {
+    selectedPhoto = null;
+    cropMode = false;
+    cropPhotoIdx = null;
+  }
+
+  render();
 }
 
 // Photo controls
