@@ -13,16 +13,26 @@ let currentPage = 0;
 // Selection state
 let selectedPhoto = null;
 
-// Drag state
+// Drag state (moving the photo container on the page)
 let dragIdx = null;
 let dragOffset = null;
 let dragging = false;
 
-// Resize state
+// Resize state (handles on the bounding box / crop mask)
 let resizing = false;
 let resizeStart = null;
 let resizePhotoIdx = null;
 let resizeOrig = null;
+
+// Crop state
+let cropMode = false;        // whether crop mode is active
+let cropPhotoIdx = null;     // which photo is in crop mode
+
+// When in crop mode, dragging the image (not the mask) moves
+// the image underneath a stationary crop mask.
+let cropDragImage = false;
+let cropImageDragStart = null;
+let cropImageOrigOffset = null;
 
 function render() {
   app.innerHTML = '';
@@ -68,10 +78,21 @@ function renderCollagePage() {
   div.style.height = pageHeightPx + 'px';
 
   page.photos.forEach((photo, idx) => {
+    // Backwards compatibility: ensure new image fields exist
+    if (photo.imageWidth == null || photo.imageHeight == null) {
+      photo.imageWidth = photo.width;
+      photo.imageHeight = photo.height;
+      photo.imageOffsetX = 0;
+      photo.imageOffsetY = 0;
+    }
+
     // Container: positions the photo on the page and
     // carries the selection frame/border (only when selected).
     const container = document.createElement('div');
-    container.className = 'photo-container' + (selectedPhoto === idx ? ' selected' : '');
+    const classes = ['photo-container'];
+    if (selectedPhoto === idx) classes.push('selected');
+    if (cropMode && cropPhotoIdx === idx) classes.push('cropping-active');
+    container.className = classes.join(' ');
     container.style.position = 'absolute';
     container.style.left = photo.x + 'px';
     container.style.top = photo.y + 'px';
@@ -80,68 +101,240 @@ function renderCollagePage() {
     container.style.pointerEvents = 'auto';
     container.dataset.photoIndex = String(idx);
 
+    // Inner mask wrapper: clips only the image, not the
+    // handles/icons that sit around the bounding box.
+    const mask = document.createElement('div');
+    mask.className = 'photo-mask';
+    mask.style.position = 'absolute';
+    mask.style.left = '0';
+    mask.style.top = '0';
+    mask.style.right = '0';
+    mask.style.bottom = '0';
+    mask.style.overflow = 'hidden';
+
     const img = document.createElement('img');
     img.src = photo.src;
     img.className = 'photo';
-    img.style.width = '100%';
-    img.style.height = '100%';
-    // Keep full image visible inside the bounding box.
-    img.style.objectFit = 'contain';
+    // The image can extend beyond the mask; the
+    // mask div acts as the clipping region.
+    img.style.position = 'absolute';
+    img.style.left = (photo.imageOffsetX || 0) + 'px';
+    img.style.top = (photo.imageOffsetY || 0) + 'px';
+    img.style.width = photo.imageWidth + 'px';
+    img.style.height = photo.imageHeight + 'px';
     img.onclick = e => {
       e.stopPropagation();
       selectPhoto(idx);
     };
-    container.appendChild(img);
 
-    // Show resize handles if selected
+    mask.appendChild(img);
+    container.appendChild(mask);
+
+    // Show resize/crop handles if selected
     if (selectedPhoto === idx) {
-      const handlePositions = [
-        { name: 'nw', left: '-8px', top: '-8px', cursor: 'nwse-resize' },
-        { name: 'ne', right: '-8px', top: '-8px', cursor: 'nesw-resize' },
-        { name: 'sw', left: '-8px', bottom: '-8px', cursor: 'nesw-resize' },
-        { name: 'se', right: '-8px', bottom: '-8px', cursor: 'nwse-resize' }
-      ];
+      const inCropMode = cropMode && cropPhotoIdx === idx;
+
+      // In crop mode, use edge handles that move a single edge
+      // in/out. Outside crop mode, show a single lower-right
+      // handle that looks like the image zoom handle.
+      const handlePositions = inCropMode
+        ? [
+            { name: 's', left: '50%', bottom: '-32px', cursor: 'ns-resize', transform: 'translateX(-50%)' },
+            { name: 'w', left: '-32px', top: '50%', cursor: 'ew-resize', transform: 'translateY(-50%)' },
+            { name: 'e', right: '-32px', top: '50%', cursor: 'ew-resize', transform: 'translateY(-50%)' }
+          ]
+        : [
+            { name: 'se', right: '-32px', bottom: '-32px', cursor: 'nwse-resize' }
+          ];
+
       handlePositions.forEach(pos => {
         const handle = document.createElement('div');
-        handle.className = 'resize-handle';
+        // Use the same base colouring/border for all resize
+        // handles; crop handles stay square via borderRadius.
+        handle.className = 'resize-handle image-resize-handle';
         handle.style.position = 'absolute';
         if (pos.left) handle.style.left = pos.left;
         if (pos.right) handle.style.right = pos.right;
         if (pos.top) handle.style.top = pos.top;
         if (pos.bottom) handle.style.bottom = pos.bottom;
         if (pos.transform) handle.style.transform = pos.transform;
-        handle.style.width = '16px';
-        handle.style.height = '16px';
-        handle.style.background = '#0078d4';
-        handle.style.borderRadius = '50%';
+        handle.style.width = '32px';
+        handle.style.height = '32px';
+        handle.style.background = '#ffffff';
+        // In crop mode, handles are squares; otherwise circles.
+        handle.style.borderRadius = inCropMode ? '0' : '50%';
         handle.style.cursor = pos.cursor;
         handle.setAttribute('data-handle', pos.name);
         handle.onmousedown = e => startResize(e, idx, pos.name);
+
+        // For the non-crop resize handle, embed the same
+        // arrow icon used by the image zoom handle.
+        if (!inCropMode && pos.name === 'se') {
+          const icon = document.createElement('img');
+          icon.src = 'icons/arrow-top-left-bottom-right.svg';
+          icon.alt = 'Resize';
+          icon.style.position = 'absolute';
+          icon.style.left = '50%';
+          icon.style.top = '50%';
+          icon.style.transform = 'translate(-50%, -50%)';
+          icon.style.width = '20px';
+          icon.style.height = '20px';
+          icon.style.pointerEvents = 'none';
+          handle.appendChild(icon);
+        }
+
+        // In crop mode, place directional expand icons
+        // on the edge handles: left icon on right edge,
+        // right icon on left edge, up icon on bottom edge.
+        if (inCropMode) {
+          let cropIconSrc = null;
+          let cropIconAlt = '';
+          if (pos.name === 'e') {
+            cropIconSrc = 'icons/arrow-expand-left.svg';
+            cropIconAlt = 'Crop inward from right';
+          } else if (pos.name === 'w') {
+            cropIconSrc = 'icons/arrow-expand-right.svg';
+            cropIconAlt = 'Crop inward from left';
+          } else if (pos.name === 's') {
+            cropIconSrc = 'icons/arrow-expand-up.svg';
+            cropIconAlt = 'Crop inward from bottom';
+          }
+
+          if (cropIconSrc) {
+            const cropIconImg = document.createElement('img');
+            cropIconImg.src = cropIconSrc;
+            cropIconImg.alt = cropIconAlt;
+            cropIconImg.style.position = 'absolute';
+            cropIconImg.style.left = '50%';
+            cropIconImg.style.top = '50%';
+            cropIconImg.style.transform = 'translate(-50%, -50%)';
+            cropIconImg.style.width = '20px';
+            cropIconImg.style.height = '20px';
+            cropIconImg.style.pointerEvents = 'none';
+            handle.appendChild(cropIconImg);
+          }
+        }
+
         container.appendChild(handle);
       });
 
-      // Rotate icon: stays at top-left of unrotated bounding box
-      const rotateIcon = document.createElement('img');
-      rotateIcon.src = 'icons/file-rotate-right.svg';
-      rotateIcon.alt = 'Rotate';
-      // Do not include this icon when capturing the
+      // In crop mode, also show an outer bounding box around the
+      // full image with its own resize handles for zooming.
+      if (inCropMode) {
+        const imageFrame = document.createElement('div');
+        imageFrame.className = 'image-frame';
+        imageFrame.style.position = 'absolute';
+        imageFrame.style.left = (photo.imageOffsetX || 0) + 'px';
+        imageFrame.style.top = (photo.imageOffsetY || 0) + 'px';
+        imageFrame.style.width = photo.imageWidth + 'px';
+        imageFrame.style.height = photo.imageHeight + 'px';
+
+        // Only show a single image resize handle in the
+        // lower-right corner, offset further out so it
+        // does not overlap the crop mask handle.
+        const imgHandle = document.createElement('div');
+        imgHandle.className = 'resize-handle image-resize-handle';
+        imgHandle.style.position = 'absolute';
+        imgHandle.style.right = '-32px';
+        imgHandle.style.bottom = '-32px';
+        imgHandle.style.width = '32px';
+        imgHandle.style.height = '32px';
+        imgHandle.style.background = '#ffffff';
+        imgHandle.style.borderRadius = '50%';
+        imgHandle.style.cursor = 'nwse-resize';
+        imgHandle.setAttribute('data-handle', 'se');
+        imgHandle.onmousedown = e => startImageResize(e, idx, 'se');
+
+        // Center the custom resize icon inside the handle.
+        const handleIcon = document.createElement('img');
+        handleIcon.src = 'icons/arrow-top-left-bottom-right.svg';
+        handleIcon.alt = 'Resize image';
+        handleIcon.style.position = 'absolute';
+        handleIcon.style.left = '50%';
+        handleIcon.style.top = '50%';
+        handleIcon.style.transform = 'translate(-50%, -50%)';
+        handleIcon.style.width = '20px';
+        handleIcon.style.height = '20px';
+        handleIcon.style.pointerEvents = 'none';
+        imgHandle.appendChild(handleIcon);
+
+        imageFrame.appendChild(imgHandle);
+
+        container.appendChild(imageFrame);
+      }
+
+      // Rotate button: styled div wrapper with centered icon,
+      // aligned with the left edge of the visible crop box
+      // and placed just above it.
+      const rotateButton = document.createElement('div');
+      rotateButton.className = 'resize-handle image-resize-handle';
+      // Do not include this control when capturing the
       // collage for PDF; external file:// images can
       // taint the canvas in some browsers.
-      rotateIcon.setAttribute('data-html2canvas-ignore', 'true');
-      rotateIcon.style.position = 'absolute';
-      rotateIcon.style.left = '-24px';
-      rotateIcon.style.top = '-24px';
-      rotateIcon.style.width = '24px';
-      rotateIcon.style.height = '24px';
-      rotateIcon.style.background = 'white';
-      rotateIcon.style.borderRadius = '50%';
-      rotateIcon.style.boxShadow = '0 1px 4px rgba(0,0,0,0.15)';
-      rotateIcon.style.cursor = 'pointer';
-      rotateIcon.onclick = e => {
+      rotateButton.setAttribute('data-html2canvas-ignore', 'true');
+      rotateButton.style.position = 'absolute';
+      // Left edge aligned with the crop box's left edge
+      rotateButton.style.left = '0';
+      // 8px above the top edge of the crop box
+      rotateButton.style.top = '-40px';
+      rotateButton.style.width = '32px';
+      rotateButton.style.height = '32px';
+      rotateButton.style.background = 'white';
+      rotateButton.style.borderRadius = '50%';
+      rotateButton.style.cursor = 'pointer';
+      rotateButton.onclick = e => {
         e.stopPropagation();
         rotatePhoto(idx);
       };
-      container.appendChild(rotateIcon);
+
+      const rotateIcon = document.createElement('img');
+      rotateIcon.src = 'icons/file-rotate-right.svg';
+      rotateIcon.alt = 'Rotate';
+      rotateIcon.style.position = 'absolute';
+      rotateIcon.style.left = '50%';
+      rotateIcon.style.top = '50%';
+      rotateIcon.style.transform = 'translate(-50%, -50%)';
+      rotateIcon.style.width = '20px';
+      rotateIcon.style.height = '20px';
+      rotateIcon.style.pointerEvents = 'none';
+      rotateButton.appendChild(rotateIcon);
+
+      container.appendChild(rotateButton);
+
+      // Crop button: styled div wrapper with centered icon,
+      // placed to the right of the rotate button.
+      const cropButton = document.createElement('div');
+      // Extra class so we can visually indicate active crop mode.
+      cropButton.className = 'resize-handle image-resize-handle crop-toggle';
+      cropButton.setAttribute('data-html2canvas-ignore', 'true');
+      cropButton.style.position = 'absolute';
+      // Placed to the right of the rotate button with a
+      // small horizontal gap, same size & vertical offset.
+      cropButton.style.left = '40px';
+      cropButton.style.top = '-40px';
+      cropButton.style.width = '32px';
+      cropButton.style.height = '32px';
+      cropButton.style.background = 'white';
+      cropButton.style.borderRadius = '50%';
+      cropButton.style.cursor = 'pointer';
+      cropButton.onclick = e => {
+        e.stopPropagation();
+        toggleCrop(idx);
+      };
+
+      const cropIcon = document.createElement('img');
+      cropIcon.src = 'icons/crop.svg';
+      cropIcon.alt = 'Crop';
+      cropIcon.style.position = 'absolute';
+      cropIcon.style.left = '50%';
+      cropIcon.style.top = '50%';
+      cropIcon.style.transform = 'translate(-50%, -50%)';
+      cropIcon.style.width = '20px';
+      cropIcon.style.height = '20px';
+      cropIcon.style.pointerEvents = 'none';
+      cropButton.appendChild(cropIcon);
+
+      container.appendChild(cropButton);
     }
 
     div.appendChild(container);
@@ -197,7 +390,11 @@ window.importPhoto = function(event) {
         y: 10,
         width,
         height,
-        rotation: 0
+        rotation: 0,
+        imageWidth: width,
+        imageHeight: height,
+        imageOffsetX: 0,
+        imageOffsetY: 0
       });
       selectedPhoto = page.photos.length - 1;
       render();
@@ -253,6 +450,25 @@ function selectPhoto(idx) {
   selectedPhoto = idx;
   render();
 }
+function toggleCrop(idx) {
+  // Toggle crop mode for a given photo. Crops are non-destructive:
+  // we never alter the underlying photo.src, only how it is shown
+  // inside its bounding box via imageWidth/Height and offsets.
+  if (cropMode && cropPhotoIdx === idx) {
+    // Turning crop mode off for the same photo simply exits the
+    // editing experience; the current mask stays in effect.
+    cropMode = false;
+    cropPhotoIdx = null;
+    render();
+    return;
+  }
+
+  // Switch crop focus to another photo (no commit step required).
+  cropMode = true;
+  cropPhotoIdx = idx;
+  selectedPhoto = idx;
+  render();
+}
 
 // Rotate photo by 90 degrees clockwise by redrawing the bitmap.
 // This avoids CSS transform artefacts like letterboxing/cropping
@@ -261,12 +477,58 @@ function rotatePhoto(idx) {
   const page = pages[currentPage];
   const photo = page.photos[idx];
 
+  // Ensure image presentation fields exist
+  if (photo.imageWidth == null || photo.imageHeight == null) {
+    photo.imageWidth = photo.width;
+    photo.imageHeight = photo.height;
+    photo.imageOffsetX = photo.imageOffsetX || 0;
+    photo.imageOffsetY = photo.imageOffsetY || 0;
+  }
+
   const img = new Image();
   img.onload = function() {
+    const imgW = img.width;
+    const imgH = img.height;
+    if (!imgW || !imgH) return;
+
+    const imageWidth = photo.imageWidth;
+    const imageHeight = photo.imageHeight;
+
+    // Describe the current crop as normalized coordinates
+    // relative to the drawn image (0..1).
+    let fw = imageWidth ? photo.width / imageWidth : 1;  // width fraction
+    let fh = imageHeight ? photo.height / imageHeight : 1; // height fraction
+    let leftNorm = imageWidth ? -(photo.imageOffsetX || 0) / imageWidth : 0;
+    let topNorm = imageHeight ? -(photo.imageOffsetY || 0) / imageHeight : 0;
+
+    // Clamp to a sane range
+    const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
+    fw = clamp(fw, 0, 1);
+    fh = clamp(fh, 0, 1);
+    leftNorm = clamp(leftNorm, 0, 1 - fw);
+    topNorm = clamp(topNorm, 0, 1 - fh);
+
+    let cx = leftNorm + fw / 2;
+    let cy = topNorm + fh / 2;
+    cx = clamp(cx, 0, 1);
+    cy = clamp(cy, 0, 1);
+
+    // Rotate the crop rectangle 90° clockwise around the
+    // image centre in normalized space.
+    const fwRot = fh;
+    const fhRot = fw;
+    let cxRot = cy;
+    let cyRot = 1 - cx;
+    cxRot = clamp(cxRot, 0, 1);
+    cyRot = clamp(cyRot, 0, 1);
+
+    // Compute the scale (drawn image size vs intrinsic)
+    const scale = imgW ? imageWidth / imgW : 1;
+
     // Create a canvas with swapped dimensions for 90° rotation
     const canvas = document.createElement('canvas');
-    canvas.width = img.height;
-    canvas.height = img.width;
+    canvas.width = imgH;
+    canvas.height = imgW;
     const ctx = canvas.getContext('2d');
 
     // Rotate around the canvas center and draw the image
@@ -276,17 +538,23 @@ function rotatePhoto(idx) {
 
     const newSrc = canvas.toDataURL('image/png');
 
-    // Swap the displayed bounding box dimensions while
-    // keeping the visual center roughly the same.
-    const oldWidth = photo.width;
-    const oldHeight = photo.height;
-    const centerX = photo.x + oldWidth / 2;
-    const centerY = photo.y + oldHeight / 2;
+    // New drawn image size keeps the same zoom level
+    const newImageWidth = imgH * scale;
+    const newImageHeight = imgW * scale;
 
-    const newWidth = oldHeight;
-    const newHeight = oldWidth;
-    let newX = centerX - newWidth / 2;
-    let newY = centerY - newHeight / 2;
+    // Apply the rotated crop fractions to the new image
+    const newWidth = fwRot * newImageWidth;
+    const newHeight = fhRot * newImageHeight;
+    const newLeftNorm = clamp(cxRot - fwRot / 2, 0, 1 - fwRot);
+    const newTopNorm = clamp(cyRot - fhRot / 2, 0, 1 - fhRot);
+    const newOffsetX = -newLeftNorm * newImageWidth;
+    const newOffsetY = -newTopNorm * newImageHeight;
+
+    // Keep the visual centre roughly the same on the page
+    const oldCenterX = photo.x + photo.width / 2;
+    const oldCenterY = photo.y + photo.height / 2;
+    let newX = oldCenterX - newWidth / 2;
+    let newY = oldCenterY - newHeight / 2;
 
     const pageWidth = page.size.width * 3;
     const pageHeight = page.size.height * 3;
@@ -301,6 +569,11 @@ function rotatePhoto(idx) {
     photo.height = newHeight;
     photo.x = newX;
     photo.y = newY;
+
+    photo.imageWidth = newImageWidth;
+    photo.imageHeight = newImageHeight;
+    photo.imageOffsetX = newOffsetX;
+    photo.imageOffsetY = newOffsetY;
 
     render();
   };
@@ -320,12 +593,40 @@ function startResize(e, idx, handle) {
   resizeStart = { x: e.pageX, y: e.pageY };
   const photo = pages[currentPage].photos[idx];
   resizeOrig = {
+    kind: 'box',
     width: photo.width,
     height: photo.height,
     x: photo.x,
     y: photo.y,
     handle,
-    dominant: null
+    dominant: null,
+    imageWidth: photo.imageWidth,
+    imageHeight: photo.imageHeight,
+    imageOffsetX: photo.imageOffsetX || 0,
+    imageOffsetY: photo.imageOffsetY || 0
+  };
+}
+
+// Resize the underlying image while in crop mode (zoom in/out)
+function startImageResize(e, idx, handle) {
+  e.stopPropagation();
+  e.preventDefault();
+  resizing = true;
+  resizePhotoIdx = idx;
+  resizeStart = { x: e.pageX, y: e.pageY };
+  const photo = pages[currentPage].photos[idx];
+  resizeOrig = {
+    kind: 'image',
+    width: photo.width,
+    height: photo.height,
+    x: photo.x,
+    y: photo.y,
+    handle,
+    dominant: null,
+    imageWidth: photo.imageWidth,
+    imageHeight: photo.imageHeight,
+    imageOffsetX: photo.imageOffsetX || 0,
+    imageOffsetY: photo.imageOffsetY || 0
   };
 }
 
@@ -339,20 +640,55 @@ document.addEventListener('mousedown', function(e) {
 
   const idx = Number(container.dataset.photoIndex);
   if (Number.isNaN(idx)) return;
-
-  dragIdx = idx;
-  dragging = true;
   const photo = pages[currentPage].photos[idx];
-  dragOffset = {
-    x: e.pageX - app.offsetLeft - photo.x,
-    y: e.pageY - app.offsetTop - photo.y
-  };
+  // In crop mode on the active photo, dragging the image moves
+  // the image under a stationary mask instead of moving the box.
+  if (cropMode && cropPhotoIdx === idx) {
+    cropDragImage = true;
+    cropImageDragStart = { x: e.pageX, y: e.pageY };
+    cropImageOrigOffset = {
+      x: photo.imageOffsetX || 0,
+      y: photo.imageOffsetY || 0
+    };
+  } else {
+    dragIdx = idx;
+    dragging = true;
+    dragOffset = {
+      x: e.pageX - app.offsetLeft - photo.x,
+      y: e.pageY - app.offsetTop - photo.y
+    };
+  }
   e.preventDefault();
 });
 
 document.addEventListener('mousemove', function(e) {
   const pageWidth = pages[currentPage].size.width * 3;
   const pageHeight = pages[currentPage].size.height * 3;
+
+   // Moving the image under a fixed crop mask
+   if (cropMode && cropDragImage && cropPhotoIdx !== null) {
+     const photo = pages[currentPage].photos[cropPhotoIdx];
+     const dx = e.pageX - cropImageDragStart.x;
+     const dy = e.pageY - cropImageDragStart.y;
+
+     let newOffsetX = cropImageOrigOffset.x + dx;
+     let newOffsetY = cropImageOrigOffset.y + dy;
+
+     const minOffsetX = Math.min(0, photo.width - photo.imageWidth);
+     const maxOffsetX = 0;
+     const minOffsetY = Math.min(0, photo.height - photo.imageHeight);
+     const maxOffsetY = 0;
+
+     if (newOffsetX < minOffsetX) newOffsetX = minOffsetX;
+     if (newOffsetX > maxOffsetX) newOffsetX = maxOffsetX;
+     if (newOffsetY < minOffsetY) newOffsetY = minOffsetY;
+     if (newOffsetY > maxOffsetY) newOffsetY = maxOffsetY;
+
+     photo.imageOffsetX = newOffsetX;
+     photo.imageOffsetY = newOffsetY;
+     render();
+     return;
+   }
 
   if (dragging && dragIdx !== null) {
     const photo = pages[currentPage].photos[dragIdx];
@@ -367,21 +703,20 @@ document.addEventListener('mousemove', function(e) {
   }
 
   if (!resizing || resizePhotoIdx === null) return;
-
   const photo = pages[currentPage].photos[resizePhotoIdx];
   const dx = e.pageX - resizeStart.x;
   const dy = e.pageY - resizeStart.y;
   const minSize = 20;
 
-  let newWidth = resizeOrig.width;
-  let newHeight = resizeOrig.height;
-  let newX = resizeOrig.x;
-  let newY = resizeOrig.y;
+  // In crop mode, we can either resize the mask (container)
+  // or the underlying image (zoom). Distinguish via kind.
+  if (cropMode && cropPhotoIdx === resizePhotoIdx && resizeOrig && resizeOrig.kind === 'image') {
+    // Resize the underlying image while keeping the mask fixed.
+    let newImageWidth = resizeOrig.imageWidth;
+    let newImageHeight = resizeOrig.imageHeight;
+    let newOffsetX = resizeOrig.imageOffsetX;
+    let newOffsetY = resizeOrig.imageOffsetY;
 
-  const aspect = resizeOrig.width / resizeOrig.height;
-  const isCorner = ['nw', 'ne', 'se', 'sw'].includes(resizeOrig.handle);
-
-  if (isCorner) {
     let widthChange = 0;
     let heightChange = 0;
 
@@ -403,83 +738,262 @@ document.addEventListener('mousemove', function(e) {
       resizeOrig.dominant = Math.abs(widthChange) >= Math.abs(heightChange) ? 'width' : 'height';
     }
 
+    let scale = 1;
     if (resizeOrig.dominant === 'width') {
-      // For all corners, widthChange is defined so that
-      // dragging the handle outward (away from the image)
-      // produces a positive change. We can therefore
-      // apply it directly.
-      let targetWidth = resizeOrig.width + widthChange;
-      if (targetWidth < minSize) targetWidth = minSize;
-      newWidth = targetWidth;
-      newHeight = newWidth / aspect;
+      scale = (resizeOrig.imageWidth + widthChange) / resizeOrig.imageWidth;
     } else {
-      // Same idea for height: heightChange already has
-      // the correct sign for the corner being dragged.
-      let targetHeight = resizeOrig.height + heightChange;
-      if (targetHeight < minSize) targetHeight = minSize;
-      newHeight = targetHeight;
-      newWidth = newHeight * aspect;
+      scale = (resizeOrig.imageHeight + heightChange) / resizeOrig.imageHeight;
     }
 
-    if (resizeOrig.handle === 'sw' || resizeOrig.handle === 'nw') {
-      newX = resizeOrig.x + (resizeOrig.width - newWidth);
+    // Prevent flipping or extreme shrinking
+    if (!Number.isFinite(scale) || scale <= 0) {
+      scale = 0.01;
     }
-    if (resizeOrig.handle === 'nw' || resizeOrig.handle === 'ne') {
-      newY = resizeOrig.y + (resizeOrig.height - newHeight);
+
+    // Ensure the image always covers the mask
+    const minScale = Math.max(
+      photo.width / resizeOrig.imageWidth,
+      photo.height / resizeOrig.imageHeight
+    );
+    if (scale < minScale) scale = minScale;
+
+    newImageWidth = resizeOrig.imageWidth * scale;
+    newImageHeight = resizeOrig.imageHeight * scale;
+
+    // Anchor the corner opposite to the dragged handle
+    if (resizeOrig.handle === 'se') {
+      // anchor top-left: offsets unchanged
+      newOffsetX = resizeOrig.imageOffsetX;
+      newOffsetY = resizeOrig.imageOffsetY;
+    } else if (resizeOrig.handle === 'sw') {
+      // anchor top-right
+      const right = resizeOrig.imageOffsetX + resizeOrig.imageWidth;
+      newOffsetX = right - newImageWidth;
+      newOffsetY = resizeOrig.imageOffsetY;
+    } else if (resizeOrig.handle === 'ne') {
+      // anchor bottom-left
+      const bottom = resizeOrig.imageOffsetY + resizeOrig.imageHeight;
+      newOffsetX = resizeOrig.imageOffsetX;
+      newOffsetY = bottom - newImageHeight;
+    } else if (resizeOrig.handle === 'nw') {
+      // anchor bottom-right
+      const right = resizeOrig.imageOffsetX + resizeOrig.imageWidth;
+      const bottom = resizeOrig.imageOffsetY + resizeOrig.imageHeight;
+      newOffsetX = right - newImageWidth;
+      newOffsetY = bottom - newImageHeight;
     }
-  } else {
-    if (resizeOrig.handle === 'e') {
+
+    // Clamp offsets so the image still fully covers the mask
+    const minOffsetX = Math.min(0, photo.width - newImageWidth);
+    const maxOffsetX = 0;
+    const minOffsetY = Math.min(0, photo.height - newImageHeight);
+    const maxOffsetY = 0;
+
+    if (newOffsetX < minOffsetX) newOffsetX = minOffsetX;
+    if (newOffsetX > maxOffsetX) newOffsetX = maxOffsetX;
+    if (newOffsetY < minOffsetY) newOffsetY = minOffsetY;
+    if (newOffsetY > maxOffsetY) newOffsetY = maxOffsetY;
+
+    photo.imageWidth = newImageWidth;
+    photo.imageHeight = newImageHeight;
+    photo.imageOffsetX = newOffsetX;
+    photo.imageOffsetY = newOffsetY;
+
+    render();
+  } else if (cropMode && cropPhotoIdx === resizePhotoIdx) {
+    // Resize the crop mask (container) while the image stays
+    // the same size underneath. In crop mode we use edge
+    // handles (n, s, e, w) that move a single edge.
+    let newWidth = resizeOrig.width;
+    let newHeight = resizeOrig.height;
+    let newX = resizeOrig.x;
+    let newY = resizeOrig.y;
+
+    const handle = resizeOrig.handle;
+
+    if (handle === 'e') {
       newWidth = resizeOrig.width + dx;
-    } else if (resizeOrig.handle === 'w') {
+    } else if (handle === 'w') {
       newWidth = resizeOrig.width - dx;
       newX = resizeOrig.x + dx;
-    } else if (resizeOrig.handle === 's') {
+    } else if (handle === 's') {
       newHeight = resizeOrig.height + dy;
-    } else if (resizeOrig.handle === 'n') {
+    } else if (handle === 'n') {
       newHeight = resizeOrig.height - dy;
       newY = resizeOrig.y + dy;
     }
 
     if (newWidth < minSize) {
       const diff = minSize - newWidth;
-      if (resizeOrig.handle === 'w') {
+      if (handle === 'w') {
         newX -= diff;
       }
       newWidth = minSize;
     }
     if (newHeight < minSize) {
       const diff = minSize - newHeight;
-      if (resizeOrig.handle === 'n') {
+      if (handle === 'n') {
         newY -= diff;
       }
       newHeight = minSize;
     }
-  }
 
-  if (newX < 0) {
-    newWidth += newX;
-    newX = 0;
-  }
-  if (newY < 0) {
-    newHeight += newY;
-    newY = 0;
-  }
-  if (newX + newWidth > pageWidth) {
-    newWidth = pageWidth - newX;
-  }
-  if (newY + newHeight > pageHeight) {
-    newHeight = pageHeight - newY;
-  }
+    // Keep the mask within the page bounds
+    if (newX < 0) {
+      newWidth += newX;
+      newX = 0;
+    }
+    if (newY < 0) {
+      newHeight += newY;
+      newY = 0;
+    }
+    if (newX + newWidth > pageWidth) {
+      newWidth = pageWidth - newX;
+    }
+    if (newY + newHeight > pageHeight) {
+      newHeight = pageHeight - newY;
+    }
 
-  if (newWidth < minSize) newWidth = minSize;
-  if (newHeight < minSize) newHeight = minSize;
+    if (newWidth < minSize) newWidth = minSize;
+    if (newHeight < minSize) newHeight = minSize;
 
-  photo.width = newWidth;
-  photo.height = newHeight;
-  photo.x = newX;
-  photo.y = newY;
+    // Ensure the mask never extends beyond the underlying image
+    const maxWidth = resizeOrig.imageWidth + resizeOrig.imageOffsetX;
+    const maxHeight = resizeOrig.imageHeight + resizeOrig.imageOffsetY;
 
-  render();
+    if (newWidth > maxWidth) {
+      const diff = newWidth - maxWidth;
+      if (handle === 'w') {
+        newX += diff;
+      }
+      newWidth = maxWidth;
+    }
+    if (newHeight > maxHeight) {
+      const diff = newHeight - maxHeight;
+      if (handle === 'n') {
+        newY += diff;
+      }
+      newHeight = maxHeight;
+    }
+
+    photo.width = newWidth;
+    photo.height = newHeight;
+    photo.x = newX;
+    photo.y = newY;
+
+    render();
+  } else {
+    // Normal resize: resize the bounding box and scale the
+    // underlying image and any existing crop along with it.
+    let newWidth = resizeOrig.width;
+    let newHeight = resizeOrig.height;
+    let newX = resizeOrig.x;
+    let newY = resizeOrig.y;
+
+    const aspect = resizeOrig.width / resizeOrig.height;
+    const isCorner = ['nw', 'ne', 'se', 'sw'].includes(resizeOrig.handle);
+
+    if (isCorner) {
+      let widthChange = 0;
+      let heightChange = 0;
+
+      if (resizeOrig.handle === 'se') {
+        widthChange = dx;
+        heightChange = dy;
+      } else if (resizeOrig.handle === 'sw') {
+        widthChange = -dx;
+        heightChange = dy;
+      } else if (resizeOrig.handle === 'ne') {
+        widthChange = dx;
+        heightChange = -dy;
+      } else if (resizeOrig.handle === 'nw') {
+        widthChange = -dx;
+        heightChange = -dy;
+      }
+
+      if (!resizeOrig.dominant) {
+        resizeOrig.dominant = Math.abs(widthChange) >= Math.abs(heightChange) ? 'width' : 'height';
+      }
+
+      if (resizeOrig.dominant === 'width') {
+        let targetWidth = resizeOrig.width + widthChange;
+        if (targetWidth < minSize) targetWidth = minSize;
+        newWidth = targetWidth;
+        newHeight = newWidth / aspect;
+      } else {
+        let targetHeight = resizeOrig.height + heightChange;
+        if (targetHeight < minSize) targetHeight = minSize;
+        newHeight = targetHeight;
+        newWidth = newHeight * aspect;
+      }
+
+      if (resizeOrig.handle === 'sw' || resizeOrig.handle === 'nw') {
+        newX = resizeOrig.x + (resizeOrig.width - newWidth);
+      }
+      if (resizeOrig.handle === 'nw' || resizeOrig.handle === 'ne') {
+        newY = resizeOrig.y + (resizeOrig.height - newHeight);
+      }
+    } else {
+      if (resizeOrig.handle === 'e') {
+        newWidth = resizeOrig.width + dx;
+      } else if (resizeOrig.handle === 'w') {
+        newWidth = resizeOrig.width - dx;
+        newX = resizeOrig.x + dx;
+      } else if (resizeOrig.handle === 's') {
+        newHeight = resizeOrig.height + dy;
+      } else if (resizeOrig.handle === 'n') {
+        newHeight = resizeOrig.height - dy;
+        newY = resizeOrig.y + dy;
+      }
+
+      if (newWidth < minSize) {
+        const diff = minSize - newWidth;
+        if (resizeOrig.handle === 'w') {
+          newX -= diff;
+        }
+        newWidth = minSize;
+      }
+      if (newHeight < minSize) {
+        const diff = minSize - newHeight;
+        if (resizeOrig.handle === 'n') {
+          newY -= diff;
+        }
+        newHeight = minSize;
+      }
+    }
+
+    if (newX < 0) {
+      newWidth += newX;
+      newX = 0;
+    }
+    if (newY < 0) {
+      newHeight += newY;
+      newY = 0;
+    }
+    if (newX + newWidth > pageWidth) {
+      newWidth = pageWidth - newX;
+    }
+    if (newY + newHeight > pageHeight) {
+      newHeight = pageHeight - newY;
+    }
+
+    if (newWidth < minSize) newWidth = minSize;
+    if (newHeight < minSize) newHeight = minSize;
+
+    photo.width = newWidth;
+    photo.height = newHeight;
+    photo.x = newX;
+    photo.y = newY;
+
+    // Scale image and any existing crop with the box
+    const scale = newWidth / resizeOrig.width;
+    photo.imageWidth = resizeOrig.imageWidth * scale;
+    photo.imageHeight = resizeOrig.imageHeight * scale;
+    photo.imageOffsetX = resizeOrig.imageOffsetX * scale;
+    photo.imageOffsetY = resizeOrig.imageOffsetY * scale;
+
+    render();
+  }
 });
 
 document.addEventListener('mouseup', function() {
@@ -490,6 +1004,9 @@ document.addEventListener('mouseup', function() {
   dragging = false;
   dragIdx = null;
   dragOffset = null;
+  cropDragImage = false;
+  cropImageDragStart = null;
+  cropImageOrigOffset = null;
 });
 
 // Initial render

@@ -44,12 +44,44 @@ body {
   outline: 2px solid #0078d4;
 }
 
+/* Active crop target sits above the dimming overlay */
+.photo-container.cropping-active {
+  z-index: 10;
+}
+/* Inner mask used for cropping; clips only the image. */
+.photo-mask {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+
 .resize-handle {
   border: 2px solid #fff;
   box-shadow: 0 1px 4px rgba(0,0,0,0.15);
   z-index: 10;
   pointer-events: auto;
 }
+
+/* Visual frame for the full underlying image while cropping. */
+.image-frame {
+  position: absolute;
+  border: 1px dashed rgba(0,0,0,0.5);
+  pointer-events: none;
+}
+
+.image-resize-handle {
+  pointer-events: auto;
+  border: 1px solid #0078d4;
+}
+
+/* When a photo is in crop mode, make the crop toggle
+   button stand out with a thicker blue border. */
+.photo-container.cropping-active .crop-toggle {
+  border-width: 2px;
+}
+
+/* Global dim overlay when cropping a photo */
+/* (Global crop overlay removed; crop mode no longer greys the whole page.) */
 
 /* When capturing to PDF, suppress outlines and handles. */
 body.printing-pdf .photo-container {
@@ -61,6 +93,8 @@ body.printing-pdf .photo-container {
 body.printing-pdf .resize-handle {
   display: none !important;
 }
+
+/* No special handling needed for a removed crop overlay in PDF mode. */
 
 @media (max-width: 600px) {
   #app {
@@ -117,4 +151,6 @@ body.printing-pdf .resize-handle {
   .resize-handle {
     display: none !important;
   }
+
+  /* No special handling needed for a removed crop overlay in print mode. */
 }
