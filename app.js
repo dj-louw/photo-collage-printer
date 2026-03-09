@@ -77,6 +77,18 @@ function renderCollagePage() {
   div.style.width = pageWidthPx + 'px';
   div.style.height = pageHeightPx + 'px';
 
+  // Clicking on empty space on the page should clear
+  // any current selection / crop mode.
+  div.addEventListener('click', e => {
+    const photoContainer = e.target.closest('.photo-container');
+    if (!photoContainer) {
+      selectedPhoto = null;
+      cropMode = false;
+      cropPhotoIdx = null;
+      render();
+    }
+  });
+
   page.photos.forEach((photo, idx) => {
     // Backwards compatibility: ensure new image fields exist
     if (photo.imageWidth == null || photo.imageHeight == null) {

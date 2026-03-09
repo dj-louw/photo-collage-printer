@@ -23,7 +23,11 @@ body {
   background: #fafafa;
   min-height: 800px;
   position: relative;
-  overflow: hidden;
+  /* Allow handles and controls around photos to remain
+     visible even when they extend slightly beyond the
+     page border; JS still constrains photo containers
+     themselves to the page bounds. */
+  overflow: visible;
 }
 
 
