@@ -28,6 +28,12 @@ let resizeOrig = null;
 let cropMode = false;        // whether crop mode is active
 let cropPhotoIdx = null;     // which photo is in crop mode
 
+// Optional aspect-ratio lock for the crop mask while in
+// crop mode. When non-null, the crop box is constrained
+// to this ratio during mask-resize operations.
+// Values: '4:3' | '3:4' | '1:1'
+let cropAspectMode = null;
+
 // When in crop mode, dragging the image (not the mask) moves
 // the image underneath a stationary crop mask.
 let cropDragImage = false;
@@ -372,6 +378,66 @@ function renderCollagePage() {
 
       container.appendChild(cropButton);
 
+      // Aspect-ratio preset buttons (only visible in crop mode).
+      if (inCropMode) {
+        const ratioButtons = [
+          { mode: '4:3', icon: 'icons/crop-landscape.svg', offset: 80 },
+          { mode: '3:4', icon: 'icons/crop-portrait.svg', offset: 120 },
+          { mode: '1:1', icon: 'icons/crop-square.svg', offset: 160 }
+        ];
+
+        ratioButtons.forEach(cfg => {
+          const btn = document.createElement('div');
+          let classNames = 'resize-handle image-resize-handle crop-ratio-toggle';
+          if (cropAspectMode === cfg.mode) classNames += ' crop-ratio-active';
+          btn.className = classNames;
+          btn.setAttribute('data-html2canvas-ignore', 'true');
+          btn.style.position = 'absolute';
+          btn.style.left = cfg.offset + 'px';
+          btn.style.top = '-40px';
+          btn.style.width = '32px';
+          btn.style.height = '32px';
+          btn.style.background = 'white';
+          btn.style.borderRadius = '50%';
+          btn.style.cursor = 'pointer';
+
+          btn.onclick = e => {
+            e.stopPropagation();
+            currentPage = pageIndex;
+
+            const pageForAspect = pages[currentPage];
+            const photoForAspect = pageForAspect.photos[idx];
+
+            if (cropAspectMode === cfg.mode) {
+              // Toggle off if already active
+              cropAspectMode = null;
+            } else {
+              cropAspectMode = cfg.mode;
+              applyCropAspectPreset(photoForAspect, pageForAspect, cfg.mode);
+            }
+            render();
+          };
+
+          const iconEl = document.createElement('img');
+          iconEl.src = cfg.icon;
+          iconEl.alt = cfg.mode === '4:3'
+            ? 'Crop 4:3 landscape'
+            : cfg.mode === '3:4'
+            ? 'Crop 3:4 portrait'
+            : 'Crop 1:1 square';
+          iconEl.style.position = 'absolute';
+          iconEl.style.left = '50%';
+          iconEl.style.top = '50%';
+          iconEl.style.transform = 'translate(-50%, -50%)';
+          iconEl.style.width = '20px';
+          iconEl.style.height = '20px';
+          iconEl.style.pointerEvents = 'none';
+          btn.appendChild(iconEl);
+
+          container.appendChild(btn);
+        });
+      }
+
       // Size readout: aspect ratio and physical dimensions
       // for the visible crop box, shown on the right edge
       // of the selected image.
@@ -444,6 +510,57 @@ window.changePageSize = function(size) {
   pages[currentPage].size = sizes[size];
   render();
 };
+
+// Apply an aspect-ratio preset to the current crop box.
+// This adjusts the box dimensions immediately when a
+// ratio button is clicked, before enforcing it during
+// subsequent resize operations.
+function applyCropAspectPreset(photo, page, mode) {
+  if (!photo || !page) return;
+
+  let targetWidth = photo.width;
+  let targetHeight = photo.height;
+
+  if (mode === '4:3') {
+    // Keep current height, adjust width to 4:3.
+    targetHeight = photo.height;
+    targetWidth = (photo.height * 4) / 3;
+  } else if (mode === '3:4') {
+    // Keep current width, adjust height to 3:4.
+    targetWidth = photo.width;
+    targetHeight = (photo.width * 4) / 3;
+  } else if (mode === '1:1') {
+    // Keep current height, make width equal to height.
+    targetHeight = photo.height;
+    targetWidth = photo.height;
+  }
+
+  // Clamp to page bounds (grow/shrink to the right/bottom).
+  const pageWidth = page.size.width * 3;
+  const pageHeight = page.size.height * 3;
+
+  if (photo.x + targetWidth > pageWidth) {
+    targetWidth = Math.max(20, pageWidth - photo.x);
+  }
+  if (photo.y + targetHeight > pageHeight) {
+    targetHeight = Math.max(20, pageHeight - photo.y);
+  }
+
+  // Ensure the crop box stays within the underlying image.
+  const maxWidth = (photo.imageWidth || targetWidth) + (photo.imageOffsetX || 0);
+  const maxHeight = (photo.imageHeight || targetHeight) + (photo.imageOffsetY || 0);
+
+  if (targetWidth > maxWidth) {
+    targetWidth = maxWidth;
+  }
+  if (targetHeight > maxHeight) {
+    targetHeight = maxHeight;
+  }
+
+  // Apply the new dimensions; top-left stays anchored.
+  photo.width = Math.max(20, targetWidth);
+  photo.height = Math.max(20, targetHeight);
+}
 
 // Photo controls
 window.importPhoto = function(event) {
@@ -916,6 +1033,55 @@ document.addEventListener('mousemove', function(e) {
     } else if (handle === 'n') {
       newHeight = resizeOrig.height - dy;
       newY = resizeOrig.y + dy;
+    }
+
+    // If an aspect ratio is locked for the crop mask,
+    // keep width/height in that ratio while the user
+    // drags any of the mask handles. Horizontal drags
+    // on side handles and vertical drags on top/bottom
+    // handles are all that is needed; no diagonal drag
+    // is required.
+    if (cropAspectMode) {
+      let ratio = 1; // width / height
+      if (cropAspectMode === '4:3') {
+        ratio = 4 / 3;
+      } else if (cropAspectMode === '3:4') {
+        ratio = 3 / 4;
+      } else if (cropAspectMode === '1:1') {
+        ratio = 1;
+      }
+
+      if (handle === 'e') {
+        // Right edge: width driven by horizontal drag;
+        // top-left corner remains anchored.
+        newWidth = resizeOrig.width + dx;
+        newHeight = newWidth / ratio;
+        newX = resizeOrig.x;
+        newY = resizeOrig.y;
+      } else if (handle === 'w') {
+        // Left edge: width driven by horizontal drag;
+        // top-right corner remains anchored.
+        newWidth = resizeOrig.width - dx;
+        newHeight = newWidth / ratio;
+        const right = resizeOrig.x + resizeOrig.width;
+        newX = right - newWidth;
+        newY = resizeOrig.y;
+      } else if (handle === 's') {
+        // Bottom edge: height driven by vertical drag;
+        // top-left corner remains anchored.
+        newHeight = resizeOrig.height + dy;
+        newWidth = newHeight * ratio;
+        newX = resizeOrig.x;
+        newY = resizeOrig.y;
+      } else if (handle === 'n') {
+        // Top edge: height driven by vertical drag;
+        // bottom-left corner remains anchored.
+        newHeight = resizeOrig.height - dy;
+        newWidth = newHeight * ratio;
+        const bottom = resizeOrig.y + resizeOrig.height;
+        newY = bottom - newHeight;
+        newX = resizeOrig.x;
+      }
     }
 
     if (newWidth < minSize) {

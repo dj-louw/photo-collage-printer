@@ -81,6 +81,14 @@ body {
   border: 1px solid #0078d4;
 }
 
+.crop-ratio-toggle {
+  /* Shares base styles from .resize-handle/.image-resize-handle */
+}
+
+.photo-container.cropping-active .crop-ratio-active {
+  border-width: 2px;
+}
+
 .photo-size-info {
   font-family: inherit;
 }
