@@ -33,6 +33,13 @@ body {
   margin: 0 auto 24px auto;
 }
 
+/* Highlight the active page with the same blue outline
+   used for the selected photo container. */
+.collage-page.active-page {
+  outline: 2px solid #0078d4;
+  outline-offset: 2px;
+}
+
 
 /* The actual <img> elements; the container carries the border/frame. */
 .photo {
@@ -79,6 +86,7 @@ body {
 .image-resize-handle {
   pointer-events: auto;
   border: 1px solid #0078d4;
+  background: #ffffff;
 }
 
 .crop-ratio-toggle {
@@ -87,6 +95,7 @@ body {
 
 .photo-container.cropping-active .crop-ratio-active {
   border-width: 2px;
+  background-color: #4daaec;
 }
 
 .photo-size-info {
@@ -97,6 +106,19 @@ body {
    button stand out with a thicker blue border. */
 .photo-container.cropping-active .crop-toggle {
   border-width: 2px;
+  background-color: #4daaec;
+}
+
+/* Generic pressed/active feedback for all circular/square
+   photo edit controls (resize, rotate, crop, delete, etc.). */
+.resize-handle.image-resize-handle:active {
+  background-color: #4daaec;
+}
+
+/* While dragging a resize button or crop handle, keep the
+   same blue background applied via a JS-added class. */
+.resize-handle.image-resize-handle.handle-active {
+  background-color: #4daaec;
 }
 
 /* Global dim overlay when cropping a photo */
@@ -106,6 +128,10 @@ body {
 body.printing-pdf .photo-container {
   border: none;
   box-shadow: none;
+  outline: none;
+}
+
+body.printing-pdf .collage-page {
   outline: none;
 }
 
@@ -174,6 +200,10 @@ body.printing-pdf .photo-size-info {
   border: none;
   box-shadow: none;
   outline: none;
+  }
+
+  .collage-page {
+    outline: none;
   }
 
   .resize-handle {

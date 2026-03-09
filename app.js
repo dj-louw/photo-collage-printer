@@ -23,6 +23,7 @@ let resizing = false;
 let resizeStart = null;
 let resizePhotoIdx = null;
 let resizeOrig = null;
+let activeHandleElement = null;
 
 // Crop state
 let cropMode = false;        // whether crop mode is active
@@ -85,7 +86,11 @@ function renderCollagePage() {
   // and interact with every page.
   pages.forEach((page, pageIndex) => {
     const div = document.createElement('div');
-    div.className = 'collage-page';
+    const pageClasses = ['collage-page'];
+    if (pageIndex === currentPage) {
+      pageClasses.push('active-page');
+    }
+    div.className = pageClasses.join(' ');
     const pageWidthPx = page.size.width * 3;
     const pageHeightPx = page.size.height * 3;
     div.style.width = pageWidthPx + 'px';
@@ -185,7 +190,17 @@ function renderCollagePage() {
         const handle = document.createElement('div');
         // Use the same base colouring/border for all resize
         // handles; crop handles stay square via borderRadius.
-        handle.className = 'resize-handle image-resize-handle';
+        let handleClass = 'resize-handle image-resize-handle';
+        if (
+          resizing &&
+          resizePhotoIdx === idx &&
+          resizeOrig &&
+          resizeOrig.kind === 'box' &&
+          resizeOrig.handle === pos.name
+        ) {
+          handleClass += ' handle-active';
+        }
+        handle.className = handleClass;
         handle.style.position = 'absolute';
         if (pos.left) handle.style.left = pos.left;
         if (pos.right) handle.style.right = pos.right;
@@ -194,7 +209,6 @@ function renderCollagePage() {
         if (pos.transform) handle.style.transform = pos.transform;
         handle.style.width = '32px';
         handle.style.height = '32px';
-        handle.style.background = '#ffffff';
         // In crop mode, handles are squares; otherwise circles.
         handle.style.borderRadius = inCropMode ? '0' : '50%';
         handle.style.cursor = pos.cursor;
@@ -270,13 +284,22 @@ function renderCollagePage() {
         // lower-right corner, offset further out so it
         // does not overlap the crop mask handle.
         const imgHandle = document.createElement('div');
-        imgHandle.className = 'resize-handle image-resize-handle';
+        let imgHandleClass = 'resize-handle image-resize-handle';
+        if (
+          resizing &&
+          resizePhotoIdx === idx &&
+          resizeOrig &&
+          resizeOrig.kind === 'image' &&
+          resizeOrig.handle === 'se'
+        ) {
+          imgHandleClass += ' handle-active';
+        }
+        imgHandle.className = imgHandleClass;
         imgHandle.style.position = 'absolute';
         imgHandle.style.right = '-32px';
         imgHandle.style.bottom = '-32px';
         imgHandle.style.width = '32px';
         imgHandle.style.height = '32px';
-        imgHandle.style.background = '#ffffff';
         imgHandle.style.borderRadius = '50%';
         imgHandle.style.cursor = 'nwse-resize';
         imgHandle.setAttribute('data-handle', 'se');
@@ -319,7 +342,6 @@ function renderCollagePage() {
       rotateButton.style.top = '-40px';
       rotateButton.style.width = '32px';
       rotateButton.style.height = '32px';
-      rotateButton.style.background = 'white';
       rotateButton.style.borderRadius = '50%';
       rotateButton.style.cursor = 'pointer';
       rotateButton.onclick = e => {
@@ -355,7 +377,6 @@ function renderCollagePage() {
       cropButton.style.top = '-40px';
       cropButton.style.width = '32px';
       cropButton.style.height = '32px';
-      cropButton.style.background = 'white';
       cropButton.style.borderRadius = '50%';
       cropButton.style.cursor = 'pointer';
       cropButton.onclick = e => {
@@ -397,7 +418,6 @@ function renderCollagePage() {
           btn.style.top = '-40px';
           btn.style.width = '32px';
           btn.style.height = '32px';
-          btn.style.background = 'white';
           btn.style.borderRadius = '50%';
           btn.style.cursor = 'pointer';
 
@@ -449,7 +469,6 @@ function renderCollagePage() {
       deleteButton.style.bottom = '-40px';
       deleteButton.style.width = '32px';
       deleteButton.style.height = '32px';
-      deleteButton.style.background = 'white';
       deleteButton.style.borderRadius = '50%';
       deleteButton.style.cursor = 'pointer';
       deleteButton.onclick = e => {
@@ -504,12 +523,39 @@ function renderCollagePage() {
 
       const aspectLine = document.createElement('div');
       aspectLine.textContent = arW + ' : ' + arH;
-      const sizeLine = document.createElement('div');
-      sizeLine.textContent =
-        mmWidth.toFixed(1) + ' × ' + mmHeight.toFixed(1) + ' mm';
+      const widthLine = document.createElement('div');
+      widthLine.style.display = 'flex';
+      widthLine.style.alignItems = 'center';
+      const widthIcon = document.createElement('img');
+      widthIcon.src = 'icons/arrow-expand-horizontal.svg';
+      widthIcon.alt = 'Width';
+      widthIcon.style.width = '14px';
+      widthIcon.style.height = '14px';
+      widthIcon.style.marginRight = '4px';
+      widthIcon.style.pointerEvents = 'none';
+      const widthText = document.createElement('span');
+      widthText.textContent = mmWidth.toFixed(1) + ' mm';
+      widthLine.appendChild(widthIcon);
+      widthLine.appendChild(widthText);
+
+      const heightLine = document.createElement('div');
+      heightLine.style.display = 'flex';
+      heightLine.style.alignItems = 'center';
+      const heightIcon = document.createElement('img');
+      heightIcon.src = 'icons/arrow-expand-vertical.svg';
+      heightIcon.alt = 'Height';
+      heightIcon.style.width = '14px';
+      heightIcon.style.height = '14px';
+      heightIcon.style.marginRight = '4px';
+      heightIcon.style.pointerEvents = 'none';
+      const heightText = document.createElement('span');
+      heightText.textContent = mmHeight.toFixed(1) + ' mm';
+      heightLine.appendChild(heightIcon);
+      heightLine.appendChild(heightText);
 
       info.appendChild(aspectLine);
-      info.appendChild(sizeLine);
+      info.appendChild(widthLine);
+      info.appendChild(heightLine);
       container.appendChild(info);
     }
 
@@ -869,6 +915,15 @@ window.rotatePhoto = rotatePhoto;
 function startResize(e, idx, handle) {
   e.stopPropagation();
   e.preventDefault();
+  // Track the active handle element so we can style it
+  // as pressed while the user is dragging.
+  if (activeHandleElement && activeHandleElement !== e.currentTarget) {
+    activeHandleElement.classList.remove('handle-active');
+  }
+  activeHandleElement = e.currentTarget || e.target;
+  if (activeHandleElement) {
+    activeHandleElement.classList.add('handle-active');
+  }
   resizing = true;
   resizePhotoIdx = idx;
   resizeStart = { x: e.pageX, y: e.pageY };
@@ -892,6 +947,13 @@ function startResize(e, idx, handle) {
 function startImageResize(e, idx, handle) {
   e.stopPropagation();
   e.preventDefault();
+  if (activeHandleElement && activeHandleElement !== e.currentTarget) {
+    activeHandleElement.classList.remove('handle-active');
+  }
+  activeHandleElement = e.currentTarget || e.target;
+  if (activeHandleElement) {
+    activeHandleElement.classList.add('handle-active');
+  }
   resizing = true;
   resizePhotoIdx = idx;
   resizeStart = { x: e.pageX, y: e.pageY };
@@ -1308,6 +1370,10 @@ document.addEventListener('mousemove', function(e) {
 });
 
 document.addEventListener('mouseup', function() {
+  // Capture whether a drag/resize was actually active so we
+  // only force a re-render when something was being adjusted.
+  const hadInteraction = resizing || dragging || cropDragImage;
+
   resizing = false;
   resizePhotoIdx = null;
   resizeStart = null;
@@ -1318,6 +1384,17 @@ document.addEventListener('mouseup', function() {
   cropDragImage = false;
   cropImageDragStart = null;
   cropImageOrigOffset = null;
+  if (activeHandleElement) {
+    activeHandleElement.classList.remove('handle-active');
+    activeHandleElement = null;
+  }
+
+  // Only re-render when we were actually dragging/resizing.
+  // This avoids destroying other controls between mouseup
+  // and their click events (e.g. Add/Remove page buttons).
+  if (hadInteraction) {
+    render();
+  }
 });
 
 // Initial render
