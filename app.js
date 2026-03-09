@@ -41,6 +41,10 @@ let cropDragImage = false;
 let cropImageDragStart = null;
 let cropImageOrigOffset = null;
 
+// Settings UI state
+let settingsOpen = false;
+let helpOpen = false;
+
 function render() {
   app.innerHTML = '';
   renderPageControls();
@@ -51,20 +55,26 @@ function render() {
 function renderPageControls() {
   const div = document.createElement('div');
   div.className = 'page-controls';
-  const page = pages[currentPage];
-  const isLetter = page.size.width === 216 && page.size.height === 279;
-  const currentSizeValue = isLetter ? 'Letter' : 'A4';
-  div.innerHTML = `
-    <button onclick="addPage()">Add Page</button>
-    <button onclick="removePage()">Remove Page</button>
-    <label>Page Size:
-      <select onchange="changePageSize(this.value)">
-        <option value="A4" ${currentSizeValue === 'A4' ? 'selected' : ''}>A4</option>
-        <option value="Letter" ${currentSizeValue === 'Letter' ? 'selected' : ''}>Letter</option>
-      </select>
-    </label>
-    <span>Page ${currentPage + 1} of ${pages.length}</span>
-  `;
+  // App heading and subheading: explain the main goal of
+  // filling each sheet to avoid wasting paper.
+  const title = document.createElement('div');
+  title.className = 'app-title';
+  title.textContent = 'Photo Collage Printer';
+
+  const subtitle = document.createElement('div');
+  subtitle.className = 'app-subtitle';
+  subtitle.textContent = 'Fill the page, save the paper';
+
+  const description = document.createElement('div');
+  description.className = 'app-description';
+  description.textContent = 'Drag, crop, and size photos so every print uses the whole sheet.';
+
+  div.appendChild(title);
+  div.appendChild(subtitle);
+   div.appendChild(description);
+
+  // Page actions themselves are attached directly to each
+  // page below; this header is purely informational.
   app.appendChild(div);
 }
 
@@ -72,10 +82,338 @@ function renderPhotoControls() {
   const div = document.createElement('div');
   div.className = 'photo-controls';
   div.innerHTML = `
-    <input type="file" accept="image/*" onchange="importPhoto(event)">
-    <button onclick="printCollage()">Print</button>
+    <input id="photo-file-input" type="file" accept="image/*" onchange="importPhoto(event)" style="display:none">
   `;
   app.appendChild(div);
+
+  // Global Print button: circular icon in the upper-right
+  // corner of the app container, with a small inset.
+  const printButton = document.createElement('div');
+  printButton.className = 'resize-handle image-resize-handle app-print-button';
+  printButton.setAttribute('data-html2canvas-ignore', 'true');
+  printButton.style.position = 'absolute';
+  // 8px breathing room to the top/right of the button
+  printButton.style.top = '8px';
+  printButton.style.right = '8px';
+  printButton.style.width = '40px';
+  printButton.style.height = '40px';
+  printButton.style.borderRadius = '50%';
+  printButton.style.cursor = 'pointer';
+  printButton.onclick = e => {
+    e.stopPropagation();
+    window.printCollage();
+  };
+
+  const printIcon = document.createElement('img');
+  printIcon.src = 'icons/printer-outline.svg';
+  printIcon.alt = 'Print collage';
+  printIcon.style.position = 'absolute';
+  printIcon.style.left = '50%';
+  printIcon.style.top = '50%';
+  printIcon.style.transform = 'translate(-50%, -50%)';
+  printIcon.style.width = '20px';
+  printIcon.style.height = '20px';
+  printIcon.style.pointerEvents = 'none';
+
+  printButton.appendChild(printIcon);
+  app.appendChild(printButton);
+
+  // Settings button: cog icon below the print button.
+  const settingsButton = document.createElement('div');
+  settingsButton.className = 'resize-handle image-resize-handle app-settings-button';
+  settingsButton.setAttribute('data-html2canvas-ignore', 'true');
+  settingsButton.style.position = 'absolute';
+  // 8px from right, placed below the print button with
+  // an 8px vertical gap (8 + 40 + 8 = 56).
+  settingsButton.style.top = '56px';
+  settingsButton.style.right = '8px';
+  settingsButton.style.width = '40px';
+  settingsButton.style.height = '40px';
+  settingsButton.style.borderRadius = '50%';
+  settingsButton.style.cursor = 'pointer';
+  settingsButton.onclick = e => {
+    e.stopPropagation();
+    settingsOpen = !settingsOpen;
+    render();
+  };
+
+  const settingsIcon = document.createElement('img');
+  settingsIcon.src = 'icons/cog-outline.svg';
+  settingsIcon.alt = 'Settings';
+  settingsIcon.style.position = 'absolute';
+  settingsIcon.style.left = '50%';
+  settingsIcon.style.top = '50%';
+  settingsIcon.style.transform = 'translate(-50%, -50%)';
+  settingsIcon.style.width = '20px';
+  settingsIcon.style.height = '20px';
+  settingsIcon.style.pointerEvents = 'none';
+
+  settingsButton.appendChild(settingsIcon);
+  app.appendChild(settingsButton);
+
+  // GitHub button: link to the project repository,
+  // stacked below the settings button.
+  const githubButton = document.createElement('div');
+  githubButton.className = 'resize-handle image-resize-handle app-github-button';
+  githubButton.setAttribute('data-html2canvas-ignore', 'true');
+  githubButton.style.position = 'absolute';
+  // 8px gap below the 40px-tall settings button
+  githubButton.style.top = '104px';
+  githubButton.style.right = '8px';
+  githubButton.style.width = '40px';
+  githubButton.style.height = '40px';
+  githubButton.style.borderRadius = '50%';
+  githubButton.style.cursor = 'pointer';
+  githubButton.onclick = e => {
+    e.stopPropagation();
+    window.open('https://github.com/dj-louw/photo-collage-printer', '_blank');
+  };
+
+  const githubIcon = document.createElement('img');
+  githubIcon.src = 'icons/github.svg';
+  githubIcon.alt = 'Open GitHub repository';
+  githubIcon.style.position = 'absolute';
+  githubIcon.style.left = '50%';
+  githubIcon.style.top = '50%';
+  githubIcon.style.transform = 'translate(-50%, -50%)';
+  githubIcon.style.width = '20px';
+  githubIcon.style.height = '20px';
+  githubIcon.style.pointerEvents = 'none';
+
+  githubButton.appendChild(githubIcon);
+  app.appendChild(githubButton);
+
+  // Help button: stacked below the GitHub button.
+  const helpButton = document.createElement('div');
+  helpButton.className = 'resize-handle image-resize-handle app-help-button';
+  helpButton.setAttribute('data-html2canvas-ignore', 'true');
+  helpButton.style.position = 'absolute';
+  // 8px gap below the 40px-tall GitHub button
+  helpButton.style.top = '152px';
+  helpButton.style.right = '8px';
+  helpButton.style.width = '40px';
+  helpButton.style.height = '40px';
+  helpButton.style.borderRadius = '50%';
+  helpButton.style.cursor = 'pointer';
+  helpButton.onclick = e => {
+    e.stopPropagation();
+    helpOpen = true;
+    render();
+  };
+
+  const helpIcon = document.createElement('img');
+  helpIcon.src = 'icons/help.svg';
+  helpIcon.alt = 'Help';
+  helpIcon.style.position = 'absolute';
+  helpIcon.style.left = '50%';
+  helpIcon.style.top = '50%';
+  helpIcon.style.transform = 'translate(-50%, -50%)';
+  helpIcon.style.width = '20px';
+  helpIcon.style.height = '20px';
+  helpIcon.style.pointerEvents = 'none';
+
+  helpButton.appendChild(helpIcon);
+  app.appendChild(helpButton);
+
+  // Settings fly-out menu: currently only page size.
+  if (settingsOpen) {
+    const page = pages[currentPage];
+    const isLetter = page.size.width === 216 && page.size.height === 279;
+    const currentSizeValue = isLetter ? 'Letter' : 'A4';
+
+    const flyout = document.createElement('div');
+    flyout.className = 'settings-flyout';
+    flyout.style.position = 'absolute';
+    // Align the flyout with the top of the settings
+    // button and place it to the left of the button
+    // column, inside the app container.
+    flyout.style.top = '56px';
+    flyout.style.right = '56px';
+    flyout.style.minWidth = '160px';
+    flyout.style.background = '#ffffff';
+    flyout.style.boxShadow = '0 2px 8px rgba(0,0,0,0.15)';
+    flyout.style.borderRadius = '6px';
+    flyout.style.padding = '8px 0';
+    flyout.style.zIndex = '20';
+
+    const sectionTitle = document.createElement('div');
+    sectionTitle.className = 'settings-section-title';
+    sectionTitle.textContent = 'Page size';
+    sectionTitle.style.fontSize = '12px';
+    sectionTitle.style.fontWeight = 'bold';
+    sectionTitle.style.padding = '4px 12px 6px 12px';
+    sectionTitle.style.textTransform = 'uppercase';
+    sectionTitle.style.color = '#666';
+    flyout.appendChild(sectionTitle);
+
+    const sizes = [
+      { value: 'A4', label: 'A4' },
+      { value: 'Letter', label: 'Letter' }
+    ];
+
+    sizes.forEach(size => {
+      const row = document.createElement('div');
+      let rowClass = 'settings-option';
+      if (currentSizeValue === size.value) {
+        rowClass += ' active';
+      }
+      row.className = rowClass;
+      row.style.padding = '6px 12px';
+      row.style.cursor = 'pointer';
+      if (currentSizeValue === size.value) {
+        row.style.fontWeight = 'bold';
+        row.style.background = '#e0f2ff';
+      }
+      row.onclick = e => {
+        e.stopPropagation();
+        window.changePageSize(size.value);
+        settingsOpen = false;
+      };
+      row.textContent = size.label;
+      flyout.appendChild(row);
+    });
+
+    app.appendChild(flyout);
+  }
+
+  // Help modal overlay
+  if (helpOpen) {
+    const overlay = document.createElement('div');
+    overlay.className = 'help-overlay';
+    overlay.setAttribute('data-html2canvas-ignore', 'true');
+    overlay.style.position = 'fixed';
+    overlay.style.left = '0';
+    overlay.style.top = '0';
+    overlay.style.right = '0';
+    overlay.style.bottom = '0';
+    overlay.style.background = 'rgba(0,0,0,0.4)';
+    overlay.style.zIndex = '100';
+    overlay.onclick = () => {
+      helpOpen = false;
+      render();
+    };
+
+    const modal = document.createElement('div');
+    modal.className = 'help-modal';
+    modal.style.position = 'absolute';
+    modal.style.left = '50%';
+    modal.style.top = '50%';
+    modal.style.transform = 'translate(-50%, -50%)';
+    modal.style.width = '420px';
+    modal.style.maxWidth = '90%';
+    modal.style.background = '#ffffff';
+    modal.style.borderRadius = '8px';
+    modal.style.boxShadow = '0 4px 12px rgba(0,0,0,0.25)';
+    modal.style.padding = '16px 20px 20px 20px';
+    modal.style.color = '#333';
+    modal.onclick = e => e.stopPropagation();
+
+    const title = document.createElement('div');
+    title.textContent = 'How to use Photo Collage Printer';
+    title.style.fontSize = '18px';
+    title.style.fontWeight = 'bold';
+    title.style.marginBottom = '8px';
+    modal.appendChild(title);
+
+    const sections = document.createElement('div');
+    sections.style.fontSize = '13px';
+    sections.style.lineHeight = '1.5';
+
+    const mkRow = (iconSrc, alt, text) => {
+      const row = document.createElement('div');
+      row.style.display = 'flex';
+      row.style.alignItems = 'center';
+      row.style.marginBottom = '6px';
+
+      const btn = document.createElement('div');
+      btn.className = 'resize-handle image-resize-handle';
+      btn.style.width = '28px';
+      btn.style.height = '28px';
+      btn.style.borderRadius = '50%';
+      btn.style.position = 'relative';
+      btn.style.marginRight = '8px';
+
+      const ic = document.createElement('img');
+      ic.src = iconSrc;
+      ic.alt = alt;
+      ic.style.position = 'absolute';
+      ic.style.left = '50%';
+      ic.style.top = '50%';
+      ic.style.transform = 'translate(-50%, -50%)';
+      ic.style.width = '18px';
+      ic.style.height = '18px';
+      ic.style.pointerEvents = 'none';
+
+      btn.appendChild(ic);
+
+      const span = document.createElement('span');
+      span.textContent = text;
+
+      row.appendChild(btn);
+      row.appendChild(span);
+      return row;
+    };
+
+    // Top-level actions
+    sections.appendChild(mkRow('icons/image-plus.svg', 'Add image', 'Add a new image to the active page.'));
+    sections.appendChild(mkRow('icons/plus.svg', 'Add page', 'Add a new blank page below the current one.'));
+    sections.appendChild(mkRow('icons/file-remove-outline.svg', 'Delete', 'Delete the active page.'));
+    sections.appendChild(mkRow('icons/delete-outline.svg', 'Delete', 'Delete the selected photo.'));
+
+    const sep1 = document.createElement('div');
+    sep1.style.height = '8px';
+    modal.appendChild(sep1);
+
+    sections.appendChild(mkRow('icons/file-rotate-right.svg', 'Rotate photo', 'Rotate the selected photo 90° clockwise.'));
+    sections.appendChild(mkRow('icons/crop.svg', 'Crop mode', 'Toggle crop mode to adjust the visible part of a photo.'));
+    sections.appendChild(mkRow('icons/arrow-top-left-bottom-right.svg', 'Resize / zoom', 'Drag resize handles to resize photos or zoom while cropping.'));
+
+    const sep2 = document.createElement('div');
+    sep2.style.height = '8px';
+    modal.appendChild(sep2);
+
+    sections.appendChild(mkRow('icons/cog-outline.svg', 'Page size', 'Open settings to switch between A4 and Letter.'));
+    sections.appendChild(mkRow('icons/printer-outline.svg', 'Print / PDF', 'Export all pages to a printable PDF.'));
+    sections.appendChild(mkRow('icons/github.svg', 'GitHub', 'Open the project on GitHub.'));
+
+    modal.appendChild(sections);
+
+    // Icon-style close button in the top-right corner,
+    // using the same round button style as other controls.
+    const closeBtn = document.createElement('div');
+    closeBtn.className = 'resize-handle image-resize-handle help-close-button';
+    closeBtn.style.position = 'absolute';
+    closeBtn.style.top = '8px';
+    closeBtn.style.right = '8px';
+    closeBtn.style.width = '28px';
+    closeBtn.style.height = '28px';
+    closeBtn.style.borderRadius = '50%';
+    closeBtn.style.cursor = 'pointer';
+    closeBtn.onclick = e => {
+      e.stopPropagation();
+      helpOpen = false;
+      render();
+    };
+
+    const closeIcon = document.createElement('img');
+    closeIcon.src = 'icons/close.svg';
+    closeIcon.alt = 'Close help';
+    closeIcon.style.position = 'absolute';
+    closeIcon.style.left = '50%';
+    closeIcon.style.top = '50%';
+    closeIcon.style.transform = 'translate(-50%, -50%)';
+    closeIcon.style.width = '18px';
+    closeIcon.style.height = '18px';
+    closeIcon.style.pointerEvents = 'none';
+
+    closeBtn.appendChild(closeIcon);
+    modal.appendChild(closeBtn);
+
+    overlay.appendChild(modal);
+    // Attach to the app container so the overlay is
+    // cleared automatically on each render.
+    app.appendChild(overlay);
+  }
 }
 
 function renderCollagePage() {
@@ -110,6 +448,44 @@ function renderCollagePage() {
         render();
       }
     });
+
+    // For the active page, show an Add Image button attached
+    // to the left edge at the top, using the same plus icon
+    // as Add Page. It triggers the hidden file input.
+    if (pageIndex === currentPage) {
+      const addImageButton = document.createElement('div');
+      addImageButton.className = 'resize-handle image-resize-handle page-add-image-button';
+      addImageButton.setAttribute('data-html2canvas-ignore', 'true');
+      addImageButton.style.position = 'absolute';
+      // 40px button width + 32px gap => 72px offset
+      addImageButton.style.left = '-72px';
+      addImageButton.style.top = '0';
+      addImageButton.style.width = '40px';
+      addImageButton.style.height = '40px';
+      addImageButton.style.borderRadius = '50%';
+      addImageButton.style.cursor = 'pointer';
+      addImageButton.onclick = e => {
+        e.stopPropagation();
+        const input = document.getElementById('photo-file-input');
+        if (input) {
+          input.click();
+        }
+      };
+
+      const plusImg = document.createElement('img');
+      plusImg.src = 'icons/image-plus.svg';
+      plusImg.alt = 'Add image';
+      plusImg.style.position = 'absolute';
+      plusImg.style.left = '50%';
+      plusImg.style.top = '50%';
+      plusImg.style.transform = 'translate(-50%, -50%)';
+      plusImg.style.width = '20px';
+      plusImg.style.height = '20px';
+      plusImg.style.pointerEvents = 'none';
+
+      addImageButton.appendChild(plusImg);
+      div.appendChild(addImageButton);
+    }
 
     page.photos.forEach((photo, idx) => {
     // Backwards compatibility: ensure new image fields exist
@@ -563,6 +939,82 @@ function renderCollagePage() {
   });
 
   app.appendChild(div);
+
+  // For the currently active page, show an Add Page button
+  // centred under the page, and a Delete Page button
+  // aligned to the left, mirroring the per-photo controls.
+  if (pageIndex === currentPage) {
+    const actions = document.createElement('div');
+    actions.className = 'page-actions';
+    actions.style.position = 'relative';
+    actions.style.width = pageWidthPx + 'px';
+    actions.style.height = '40px';
+    actions.style.margin = '8px auto 24px auto';
+
+    // Add Page button (centred)
+    const addButton = document.createElement('div');
+    addButton.className = 'resize-handle image-resize-handle page-add-button';
+    addButton.style.position = 'absolute';
+    addButton.style.left = '50%';
+    addButton.style.top = '0';
+    addButton.style.transform = 'translateX(-50%)';
+    addButton.style.width = '40px';
+    addButton.style.height = '40px';
+    addButton.style.borderRadius = '50%';
+    addButton.style.cursor = 'pointer';
+    addButton.onclick = e => {
+      e.stopPropagation();
+      window.addPage();
+    };
+
+    const plusIcon = document.createElement('img');
+    plusIcon.src = 'icons/plus.svg';
+    plusIcon.alt = 'Add page';
+    plusIcon.style.position = 'absolute';
+    plusIcon.style.left = '50%';
+    plusIcon.style.top = '50%';
+    plusIcon.style.transform = 'translate(-50%, -50%)';
+    plusIcon.style.width = '20px';
+    plusIcon.style.height = '20px';
+    plusIcon.style.pointerEvents = 'none';
+
+    addButton.appendChild(plusIcon);
+    actions.appendChild(addButton);
+
+    // Delete Page button (left-aligned), hidden if only
+    // one page exists.
+    if (pages.length > 1) {
+      const deletePageButton = document.createElement('div');
+      deletePageButton.className = 'resize-handle image-resize-handle page-delete-button';
+      deletePageButton.style.position = 'absolute';
+      deletePageButton.style.left = '0';
+      deletePageButton.style.top = '0';
+      deletePageButton.style.width = '40px';
+      deletePageButton.style.height = '40px';
+      deletePageButton.style.borderRadius = '50%';
+      deletePageButton.style.cursor = 'pointer';
+      deletePageButton.onclick = e => {
+        e.stopPropagation();
+        window.removePage();
+      };
+
+      const deleteIcon = document.createElement('img');
+      deleteIcon.src = 'icons/file-remove-outline.svg';
+      deleteIcon.alt = 'Delete page';
+      deleteIcon.style.position = 'absolute';
+      deleteIcon.style.left = '50%';
+      deleteIcon.style.top = '50%';
+      deleteIcon.style.transform = 'translate(-50%, -50%)';
+      deleteIcon.style.width = '20px';
+      deleteIcon.style.height = '20px';
+      deleteIcon.style.pointerEvents = 'none';
+
+      deletePageButton.appendChild(deleteIcon);
+      actions.appendChild(deletePageButton);
+    }
+
+    app.appendChild(actions);
+  }
   });
 }
 

@@ -12,10 +12,33 @@ body {
   border-radius: 8px;
   box-shadow: 0 2px 8px rgba(0,0,0,0.1);
   padding: 24px;
+  position: relative;
 }
 
 .page-controls, .photo-controls {
   margin-bottom: 16px;
+}
+
+.app-title {
+  font-size: 20px;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.app-subtitle {
+  font-size: 13px;
+  color: #555;
+}
+
+.app-description {
+  font-size: 13px;
+  color: #555;
+  margin-top: 4px;
+}
+
+.page-controls {
+  text-align: center;
+  margin-bottom: 40px;
 }
 
 .collage-page {
@@ -143,6 +166,10 @@ body.printing-pdf .photo-size-info {
   display: none !important;
 }
 
+body.printing-pdf .help-overlay {
+  display: none !important;
+}
+
 /* No special handling needed for a removed crop overlay in PDF mode. */
 
 @media (max-width: 600px) {
@@ -211,6 +238,10 @@ body.printing-pdf .photo-size-info {
   }
 
   .photo-size-info {
+    display: none !important;
+  }
+
+  .help-overlay {
     display: none !important;
   }
 
