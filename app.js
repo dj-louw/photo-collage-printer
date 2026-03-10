@@ -470,6 +470,420 @@ function renderPhotoControls() {
   }
 }
 
+// ============================================
+// Helper functions for renderCollagePage
+// ============================================
+
+// Create the inner mask and image element for a photo container
+function createPhotoMask(photo, pageIndex, idx) {
+  const mask = document.createElement('div');
+  mask.className = 'photo-mask';
+  mask.style.position = 'absolute';
+  mask.style.left = '0';
+  mask.style.top = '0';
+  mask.style.right = '0';
+  mask.style.bottom = '0';
+  mask.style.overflow = 'hidden';
+
+  const img = document.createElement('img');
+  img.src = photo.src;
+  img.className = 'photo';
+  img.style.position = 'absolute';
+  img.style.left = (photo.imageOffsetX || 0) + 'px';
+  img.style.top = (photo.imageOffsetY || 0) + 'px';
+  img.style.width = photo.imageWidth + 'px';
+  img.style.height = photo.imageHeight + 'px';
+  img.onclick = e => {
+    e.stopPropagation();
+    selectPhoto(pageIndex, idx);
+  };
+  img.onpointerdown = e => {
+    handlePointerDownOnImage(e.pageX, e.pageY, img, e);
+  };
+
+  mask.appendChild(img);
+  return mask;
+}
+
+// Create resize handles for the selected photo
+function createResizeHandles(pageIndex, idx, photo, inCropMode, container) {
+  const handlePositions = inCropMode
+    ? [
+        { name: 's', left: '50%', bottom: '4px', cursor: 'ns-resize', transform: 'translateX(-50%)' },
+        { name: 'w', left: '4px', top: '50%', cursor: 'ew-resize', transform: 'translateY(-50%)' },
+        { name: 'e', right: '4px', top: '50%', cursor: 'ew-resize', transform: 'translateY(-50%)' }
+      ]
+    : [
+        { name: 'se', right: '4px', bottom: '4px', cursor: 'nwse-resize' }
+      ];
+
+  handlePositions.forEach(pos => {
+    const handle = document.createElement('div');
+    let handleClass = 'resize-handle image-resize-handle';
+    if (
+      resizing &&
+      resizePhotoIdx === idx &&
+      resizeOrig &&
+      resizeOrig.kind === 'box' &&
+      resizeOrig.handle === pos.name
+    ) {
+      handleClass += ' handle-active';
+    }
+    handle.className = handleClass;
+    handle.style.position = 'absolute';
+    if (pos.left) handle.style.left = pos.left;
+    if (pos.right) handle.style.right = pos.right;
+    if (pos.top) handle.style.top = pos.top;
+    if (pos.bottom) handle.style.bottom = pos.bottom;
+    if (pos.transform) handle.style.transform = pos.transform;
+    handle.style.width = '32px';
+    handle.style.height = '32px';
+    handle.style.borderRadius = inCropMode ? '0' : '50%';
+    handle.style.cursor = pos.cursor;
+    handle.setAttribute('data-handle', pos.name);
+
+    handle.onpointerdown = e => {
+      currentPage = pageIndex;
+      startResize(e, idx, pos.name);
+    };
+
+    // Non-crop resize handle icon
+    if (!inCropMode && pos.name === 'se') {
+      const icon = document.createElement('img');
+      icon.src = 'icons/arrow-top-left-bottom-right.svg';
+      icon.alt = 'Resize';
+      icon.style.position = 'absolute';
+      icon.style.left = '50%';
+      icon.style.top = '50%';
+      icon.style.transform = 'translate(-50%, -50%)';
+      icon.style.width = '20px';
+      icon.style.height = '20px';
+      icon.style.pointerEvents = 'none';
+      handle.appendChild(icon);
+    }
+
+    // Crop mode directional icons
+    if (inCropMode) {
+      let cropIconSrc = null;
+      let cropIconAlt = '';
+      if (pos.name === 'e') {
+        cropIconSrc = 'icons/arrow-expand-left.svg';
+        cropIconAlt = 'Crop inward from right';
+      } else if (pos.name === 'w') {
+        cropIconSrc = 'icons/arrow-expand-right.svg';
+        cropIconAlt = 'Crop inward from left';
+      } else if (pos.name === 's') {
+        cropIconSrc = 'icons/arrow-expand-up.svg';
+        cropIconAlt = 'Crop inward from bottom';
+      }
+
+      if (cropIconSrc) {
+        const cropIconImg = document.createElement('img');
+        cropIconImg.src = cropIconSrc;
+        cropIconImg.alt = cropIconAlt;
+        cropIconImg.style.position = 'absolute';
+        cropIconImg.style.left = '50%';
+        cropIconImg.style.top = '50%';
+        cropIconImg.style.transform = 'translate(-50%, -50%)';
+        cropIconImg.style.width = '20px';
+        cropIconImg.style.height = '20px';
+        cropIconImg.style.pointerEvents = 'none';
+        handle.appendChild(cropIconImg);
+      }
+    }
+
+    // Counter-scale based on position
+    let handleOrigin = 'center center';
+    if (pos.name === 's') handleOrigin = 'bottom center';
+    else if (pos.name === 'w') handleOrigin = 'left center';
+    else if (pos.name === 'e') handleOrigin = 'right center';
+    else if (pos.name === 'se') handleOrigin = 'bottom right';
+    applyCounterScale(handle, handleOrigin);
+
+    container.appendChild(handle);
+  });
+}
+
+// Create the image frame for crop mode zooming
+function createImageFrame(pageIndex, idx, photo, container) {
+  const imageFrame = document.createElement('div');
+  imageFrame.className = 'image-frame';
+  imageFrame.style.position = 'absolute';
+  imageFrame.style.left = (photo.imageOffsetX || 0) + 'px';
+  imageFrame.style.top = (photo.imageOffsetY || 0) + 'px';
+  imageFrame.style.width = photo.imageWidth + 'px';
+  imageFrame.style.height = photo.imageHeight + 'px';
+
+  const imgHandle = document.createElement('div');
+  let imgHandleClass = 'resize-handle image-resize-handle';
+  if (
+    resizing &&
+    resizePhotoIdx === idx &&
+    resizeOrig &&
+    resizeOrig.kind === 'image' &&
+    resizeOrig.handle === 'se'
+  ) {
+    imgHandleClass += ' handle-active';
+  }
+  imgHandle.className = imgHandleClass;
+  imgHandle.style.position = 'absolute';
+  imgHandle.style.right = '4px';
+  imgHandle.style.bottom = '4px';
+  imgHandle.style.width = '32px';
+  imgHandle.style.height = '32px';
+  imgHandle.style.borderRadius = '50%';
+  imgHandle.style.cursor = 'nwse-resize';
+  imgHandle.setAttribute('data-handle', 'se');
+
+  imgHandle.onpointerdown = e => {
+    currentPage = pageIndex;
+    startImageResize(e, idx, 'se');
+  };
+
+  const handleIcon = document.createElement('img');
+  handleIcon.src = 'icons/arrow-top-left-bottom-right.svg';
+  handleIcon.alt = 'Resize image';
+  handleIcon.style.position = 'absolute';
+  handleIcon.style.left = '50%';
+  handleIcon.style.top = '50%';
+  handleIcon.style.transform = 'translate(-50%, -50%)';
+  handleIcon.style.width = '20px';
+  handleIcon.style.height = '20px';
+  handleIcon.style.pointerEvents = 'none';
+  imgHandle.appendChild(handleIcon);
+
+  applyCounterScale(imgHandle, 'bottom right');
+  imageFrame.appendChild(imgHandle);
+  container.appendChild(imageFrame);
+}
+
+// Create photo control buttons (rotate, crop, ratio presets, delete)
+function createPhotoControls(pageIndex, idx, inCropMode, container) {
+  // Rotate button
+  const rotateButton = document.createElement('div');
+  rotateButton.className = 'resize-handle image-resize-handle icon-btn icon-btn--md';
+  rotateButton.setAttribute('data-html2canvas-ignore', 'true');
+  rotateButton.style.left = '4px';
+  rotateButton.style.top = '4px';
+  rotateButton.onclick = e => {
+    e.stopPropagation();
+    currentPage = pageIndex;
+    rotatePhoto(idx);
+  };
+
+  const rotateIcon = document.createElement('img');
+  rotateIcon.src = 'icons/file-rotate-right.svg';
+  rotateIcon.alt = 'Rotate';
+  rotateIcon.className = 'icon-btn__icon icon-btn__icon--md';
+  rotateButton.appendChild(rotateIcon);
+  applyCounterScale(rotateButton, 'top left');
+  container.appendChild(rotateButton);
+
+  // Crop button
+  const cropButton = document.createElement('div');
+  cropButton.className = 'resize-handle image-resize-handle icon-btn icon-btn--md crop-toggle';
+  cropButton.setAttribute('data-html2canvas-ignore', 'true');
+  cropButton.style.left = '44px';
+  cropButton.style.top = '4px';
+  cropButton.onclick = e => {
+    e.stopPropagation();
+    currentPage = pageIndex;
+    toggleCrop(idx);
+  };
+
+  const cropIcon = document.createElement('img');
+  cropIcon.src = 'icons/crop.svg';
+  cropIcon.alt = 'Crop';
+  cropIcon.className = 'icon-btn__icon icon-btn__icon--md';
+  cropButton.appendChild(cropIcon);
+  applyCounterScale(cropButton, 'top left');
+  container.appendChild(cropButton);
+
+  // Aspect-ratio preset buttons (only in crop mode)
+  if (inCropMode) {
+    const ratioButtons = [
+      { mode: '4:3', icon: 'icons/crop-landscape.svg', offset: 84 },
+      { mode: '3:4', icon: 'icons/crop-portrait.svg', offset: 124 },
+      { mode: '1:1', icon: 'icons/crop-square.svg', offset: 164 }
+    ];
+
+    ratioButtons.forEach(cfg => {
+      const btn = document.createElement('div');
+      let classNames = 'resize-handle image-resize-handle icon-btn icon-btn--md crop-ratio-toggle';
+      if (cropAspectMode === cfg.mode) classNames += ' crop-ratio-active';
+      btn.className = classNames;
+      btn.setAttribute('data-html2canvas-ignore', 'true');
+      btn.style.left = cfg.offset + 'px';
+      btn.style.top = '4px';
+
+      btn.onclick = e => {
+        e.stopPropagation();
+        currentPage = pageIndex;
+
+        const pageForAspect = pages[currentPage];
+        const photoForAspect = pageForAspect.photos[idx];
+
+        if (cropAspectMode === cfg.mode) {
+          cropAspectMode = null;
+        } else {
+          cropAspectMode = cfg.mode;
+          applyCropAspectPreset(photoForAspect, pageForAspect, cfg.mode);
+        }
+        render();
+      };
+
+      const iconEl = document.createElement('img');
+      iconEl.src = cfg.icon;
+      iconEl.alt = cfg.mode === '4:3'
+        ? 'Crop 4:3 landscape'
+        : cfg.mode === '3:4'
+        ? 'Crop 3:4 portrait'
+        : 'Crop 1:1 square';
+      iconEl.className = 'icon-btn__icon icon-btn__icon--md';
+      btn.appendChild(iconEl);
+      applyCounterScale(btn, 'top left');
+      container.appendChild(btn);
+    });
+  }
+
+  // Delete button
+  const deleteButton = document.createElement('div');
+  deleteButton.className = 'resize-handle image-resize-handle icon-btn icon-btn--md';
+  deleteButton.setAttribute('data-html2canvas-ignore', 'true');
+  deleteButton.style.left = '4px';
+  deleteButton.style.bottom = '4px';
+  deleteButton.onclick = e => {
+    e.stopPropagation();
+    currentPage = pageIndex;
+    deletePhoto(pageIndex, idx);
+  };
+
+  const deleteIcon = document.createElement('img');
+  deleteIcon.src = 'icons/delete-outline.svg';
+  deleteIcon.alt = 'Delete photo';
+  deleteIcon.className = 'icon-btn__icon icon-btn__icon--md';
+  deleteButton.appendChild(deleteIcon);
+  applyCounterScale(deleteButton, 'bottom left');
+  container.appendChild(deleteButton);
+}
+
+// Create the size info readout for a selected photo
+function createSizeInfo(photo, container) {
+  const wPx = Math.max(1, photo.width);
+  const hPx = Math.max(1, photo.height);
+  const wInt = Math.round(wPx);
+  const hInt = Math.round(hPx);
+  const gcd = (a, b) => (b === 0 ? a : gcd(b, a % b));
+  const g = gcd(wInt, hInt) || 1;
+  const arW = Math.round(wInt / g);
+  const arH = Math.round(hInt / g);
+  const mmWidth = wPx / 3;
+  const mmHeight = hPx / 3;
+
+  const info = document.createElement('div');
+  info.className = 'photo-size-info';
+  info.setAttribute('data-html2canvas-ignore', 'true');
+  info.style.position = 'absolute';
+  info.style.right = '4px';
+  info.style.top = '4px';
+  info.style.fontSize = '11px';
+  info.style.lineHeight = '1.2';
+  info.style.color = '#333';
+  info.style.background = 'rgba(255, 255, 255, 0.9)';
+  info.style.padding = '2px 4px';
+  info.style.borderRadius = '3px';
+  info.style.whiteSpace = 'nowrap';
+  info.style.pointerEvents = 'none';
+
+  const aspectLine = document.createElement('div');
+  aspectLine.textContent = arW + ' : ' + arH;
+
+  const widthLine = document.createElement('div');
+  widthLine.style.display = 'flex';
+  widthLine.style.alignItems = 'center';
+  const widthIcon = document.createElement('img');
+  widthIcon.src = 'icons/arrow-expand-horizontal.svg';
+  widthIcon.alt = 'Width';
+  widthIcon.style.width = '14px';
+  widthIcon.style.height = '14px';
+  widthIcon.style.marginRight = '4px';
+  widthIcon.style.pointerEvents = 'none';
+  const widthText = document.createElement('span');
+  widthText.textContent = mmWidth.toFixed(1) + ' mm';
+  widthLine.appendChild(widthIcon);
+  widthLine.appendChild(widthText);
+
+  const heightLine = document.createElement('div');
+  heightLine.style.display = 'flex';
+  heightLine.style.alignItems = 'center';
+  const heightIcon = document.createElement('img');
+  heightIcon.src = 'icons/arrow-expand-vertical.svg';
+  heightIcon.alt = 'Height';
+  heightIcon.style.width = '14px';
+  heightIcon.style.height = '14px';
+  heightIcon.style.marginRight = '4px';
+  heightIcon.style.pointerEvents = 'none';
+  const heightText = document.createElement('span');
+  heightText.textContent = mmHeight.toFixed(1) + ' mm';
+  heightLine.appendChild(heightIcon);
+  heightLine.appendChild(heightText);
+
+  info.appendChild(aspectLine);
+  info.appendChild(widthLine);
+  info.appendChild(heightLine);
+  applyCounterScale(info, 'right top');
+  container.appendChild(info);
+}
+
+// Create Add Page and Delete Page buttons below the active page
+function createPageActions(pageWidthPx, scale) {
+  const actions = document.createElement('div');
+  actions.className = 'page-actions';
+  actions.style.position = 'relative';
+  actions.style.width = (pageWidthPx * scale) + 'px';
+  actions.style.height = '40px';
+  actions.style.margin = '8px auto 24px auto';
+
+  // Add Page button (centred)
+  const addButton = document.createElement('div');
+  addButton.className = 'resize-handle image-resize-handle icon-btn icon-btn--lg page-add-button';
+  addButton.style.left = '50%';
+  addButton.style.top = '0';
+  addButton.style.transform = 'translateX(-50%)';
+  addButton.onclick = e => {
+    e.stopPropagation();
+    window.addPage();
+  };
+
+  const plusIcon = document.createElement('img');
+  plusIcon.src = 'icons/plus.svg';
+  plusIcon.alt = 'Add page';
+  plusIcon.className = 'icon-btn__icon icon-btn__icon--lg';
+  addButton.appendChild(plusIcon);
+  actions.appendChild(addButton);
+
+  // Delete Page button (left-aligned), hidden if only one page
+  if (pages.length > 1) {
+    const deletePageButton = document.createElement('div');
+    deletePageButton.className = 'resize-handle image-resize-handle icon-btn icon-btn--lg page-delete-button';
+    deletePageButton.style.left = '0';
+    deletePageButton.style.top = '0';
+    deletePageButton.onclick = e => {
+      e.stopPropagation();
+      window.removePage();
+    };
+
+    const deleteIcon = document.createElement('img');
+    deleteIcon.src = 'icons/file-remove-outline.svg';
+    deleteIcon.alt = 'Delete page';
+    deleteIcon.className = 'icon-btn__icon icon-btn__icon--lg';
+    deletePageButton.appendChild(deleteIcon);
+    actions.appendChild(deletePageButton);
+  }
+
+  return actions;
+}
+
 function renderCollagePage() {
   // Render all pages vertically, like a word processor
   // document. The currentPage index still tracks which
@@ -561,39 +975,8 @@ function renderCollagePage() {
     container.dataset.pageIndex = String(pageIndex);
     container.dataset.photoIndex = String(idx);
 
-    // Inner mask wrapper: clips only the image, not the
-    // handles/icons that sit around the bounding box.
-    const mask = document.createElement('div');
-    mask.className = 'photo-mask';
-    mask.style.position = 'absolute';
-    mask.style.left = '0';
-    mask.style.top = '0';
-    mask.style.right = '0';
-    mask.style.bottom = '0';
-    mask.style.overflow = 'hidden';
-
-    const img = document.createElement('img');
-    img.src = photo.src;
-    img.className = 'photo';
-    // The image can extend beyond the mask; the
-    // mask div acts as the clipping region.
-    img.style.position = 'absolute';
-    img.style.left = (photo.imageOffsetX || 0) + 'px';
-    img.style.top = (photo.imageOffsetY || 0) + 'px';
-    img.style.width = photo.imageWidth + 'px';
-    img.style.height = photo.imageHeight + 'px';
-    img.onclick = e => {
-      e.stopPropagation();
-      selectPhoto(pageIndex, idx);
-    };
-
-    // Unified pointer events: work for mouse, touch, and pen.
-    // pointerdown starts drag/crop; click handles selection.
-    img.onpointerdown = e => {
-      handlePointerDownOnImage(e.pageX, e.pageY, img, e);
-    };
-
-    mask.appendChild(img);
+    // Create the inner mask and image using helper
+    const mask = createPhotoMask(photo, pageIndex, idx);
     container.appendChild(mask);
 
     // Show resize/crop handles only for the selected
@@ -601,377 +984,19 @@ function renderCollagePage() {
     if (isSelectedOnActivePage) {
       const inCropMode = cropMode && cropPhotoIdx === idx;
 
-      // In crop mode, use edge handles that move a single edge
-      // in/out. Outside crop mode, show a single lower-right
-      // handle that looks like the image zoom handle.
-      const handlePositions = inCropMode
-        ? [
-            { name: 's', left: '50%', bottom: '4px', cursor: 'ns-resize', transform: 'translateX(-50%)' },
-            { name: 'w', left: '4px', top: '50%', cursor: 'ew-resize', transform: 'translateY(-50%)' },
-            { name: 'e', right: '4px', top: '50%', cursor: 'ew-resize', transform: 'translateY(-50%)' }
-          ]
-        : [
-            { name: 'se', right: '4px', bottom: '4px', cursor: 'nwse-resize' }
-          ];
+      // Create resize handles using helper
+      createResizeHandles(pageIndex, idx, photo, inCropMode, container);
 
-      handlePositions.forEach(pos => {
-        const handle = document.createElement('div');
-        // Use the same base colouring/border for all resize
-        // handles; crop handles stay square via borderRadius.
-        let handleClass = 'resize-handle image-resize-handle';
-        if (
-          resizing &&
-          resizePhotoIdx === idx &&
-          resizeOrig &&
-          resizeOrig.kind === 'box' &&
-          resizeOrig.handle === pos.name
-        ) {
-          handleClass += ' handle-active';
-        }
-        handle.className = handleClass;
-        handle.style.position = 'absolute';
-        if (pos.left) handle.style.left = pos.left;
-        if (pos.right) handle.style.right = pos.right;
-        if (pos.top) handle.style.top = pos.top;
-        if (pos.bottom) handle.style.bottom = pos.bottom;
-        if (pos.transform) handle.style.transform = pos.transform;
-        handle.style.width = '32px';
-        handle.style.height = '32px';
-        // In crop mode, handles are squares; otherwise circles.
-        handle.style.borderRadius = inCropMode ? '0' : '50%';
-        handle.style.cursor = pos.cursor;
-        handle.setAttribute('data-handle', pos.name);
-
-        const startBoxResize = evt => {
-          currentPage = pageIndex;
-          startResize(evt, idx, pos.name);
-        };
-
-        // Unified pointer event for mouse, touch, and pen
-        handle.onpointerdown = e => {
-          startBoxResize(e);
-        };
-
-        // For the non-crop resize handle, embed the same
-        // arrow icon used by the image zoom handle.
-        if (!inCropMode && pos.name === 'se') {
-          const icon = document.createElement('img');
-          icon.src = 'icons/arrow-top-left-bottom-right.svg';
-          icon.alt = 'Resize';
-          icon.style.position = 'absolute';
-          icon.style.left = '50%';
-          icon.style.top = '50%';
-          icon.style.transform = 'translate(-50%, -50%)';
-          icon.style.width = '20px';
-          icon.style.height = '20px';
-          icon.style.pointerEvents = 'none';
-          handle.appendChild(icon);
-        }
-
-        // In crop mode, place directional expand icons
-        // on the edge handles: left icon on right edge,
-        // right icon on left edge, up icon on bottom edge.
-        if (inCropMode) {
-          let cropIconSrc = null;
-          let cropIconAlt = '';
-          if (pos.name === 'e') {
-            cropIconSrc = 'icons/arrow-expand-left.svg';
-            cropIconAlt = 'Crop inward from right';
-          } else if (pos.name === 'w') {
-            cropIconSrc = 'icons/arrow-expand-right.svg';
-            cropIconAlt = 'Crop inward from left';
-          } else if (pos.name === 's') {
-            cropIconSrc = 'icons/arrow-expand-up.svg';
-            cropIconAlt = 'Crop inward from bottom';
-          }
-
-          if (cropIconSrc) {
-            const cropIconImg = document.createElement('img');
-            cropIconImg.src = cropIconSrc;
-            cropIconImg.alt = cropIconAlt;
-            cropIconImg.style.position = 'absolute';
-            cropIconImg.style.left = '50%';
-            cropIconImg.style.top = '50%';
-            cropIconImg.style.transform = 'translate(-50%, -50%)';
-            cropIconImg.style.width = '20px';
-            cropIconImg.style.height = '20px';
-            cropIconImg.style.pointerEvents = 'none';
-            handle.appendChild(cropIconImg);
-          }
-        }
-
-        // Counter-scale the handle based on its position
-        let handleOrigin = 'center center';
-        if (pos.name === 's') handleOrigin = 'bottom center';
-        else if (pos.name === 'w') handleOrigin = 'left center';
-        else if (pos.name === 'e') handleOrigin = 'right center';
-        else if (pos.name === 'se') handleOrigin = 'bottom right';
-        applyCounterScale(handle, handleOrigin);
-
-        container.appendChild(handle);
-      });
-
-      // In crop mode, also show an outer bounding box around the
-      // full image with its own resize handles for zooming.
+      // In crop mode, show the image frame for zooming
       if (inCropMode) {
-        const imageFrame = document.createElement('div');
-        imageFrame.className = 'image-frame';
-        imageFrame.style.position = 'absolute';
-        imageFrame.style.left = (photo.imageOffsetX || 0) + 'px';
-        imageFrame.style.top = (photo.imageOffsetY || 0) + 'px';
-        imageFrame.style.width = photo.imageWidth + 'px';
-        imageFrame.style.height = photo.imageHeight + 'px';
-
-        // Only show a single image resize handle in the
-        // lower-right corner, inside the image frame.
-        const imgHandle = document.createElement('div');
-        let imgHandleClass = 'resize-handle image-resize-handle';
-        if (
-          resizing &&
-          resizePhotoIdx === idx &&
-          resizeOrig &&
-          resizeOrig.kind === 'image' &&
-          resizeOrig.handle === 'se'
-        ) {
-          imgHandleClass += ' handle-active';
-        }
-        imgHandle.className = imgHandleClass;
-        imgHandle.style.position = 'absolute';
-        imgHandle.style.right = '4px';
-        imgHandle.style.bottom = '4px';
-        imgHandle.style.width = '32px';
-        imgHandle.style.height = '32px';
-        imgHandle.style.borderRadius = '50%';
-        imgHandle.style.cursor = 'nwse-resize';
-        imgHandle.setAttribute('data-handle', 'se');
-
-        const startImageBoxResize = evt => {
-          currentPage = pageIndex;
-          startImageResize(evt, idx, 'se');
-        };
-
-        // Unified pointer event for mouse, touch, and pen
-        imgHandle.onpointerdown = e => {
-          startImageBoxResize(e);
-        };
-
-        // Center the custom resize icon inside the handle.
-        const handleIcon = document.createElement('img');
-        handleIcon.src = 'icons/arrow-top-left-bottom-right.svg';
-        handleIcon.alt = 'Resize image';
-        handleIcon.style.position = 'absolute';
-        handleIcon.style.left = '50%';
-        handleIcon.style.top = '50%';
-        handleIcon.style.transform = 'translate(-50%, -50%)';
-        handleIcon.style.width = '20px';
-        handleIcon.style.height = '20px';
-        handleIcon.style.pointerEvents = 'none';
-        imgHandle.appendChild(handleIcon);
-
-        // Counter-scale the handle (inside bottom-right position)
-        applyCounterScale(imgHandle, 'bottom right');
-
-        imageFrame.appendChild(imgHandle);
-
-        container.appendChild(imageFrame);
+        createImageFrame(pageIndex, idx, photo, container);
       }
 
-      // Rotate button: styled div wrapper with centered icon,
-      // inside the photo at the top-left corner.
-      const rotateButton = document.createElement('div');
-      rotateButton.className = 'resize-handle image-resize-handle icon-btn icon-btn--md';
-      // Do not include this control when capturing the
-      // collage for PDF; external file:// images can
-      // taint the canvas in some browsers.
-      rotateButton.setAttribute('data-html2canvas-ignore', 'true');
-      // Inside the photo, top-left corner
-      rotateButton.style.left = '4px';
-      rotateButton.style.top = '4px';
-      rotateButton.onclick = e => {
-        e.stopPropagation();
-        currentPage = pageIndex;
-        rotatePhoto(idx);
-      };
+      // Create photo control buttons using helper
+      createPhotoControls(pageIndex, idx, inCropMode, container);
 
-      const rotateIcon = document.createElement('img');
-      rotateIcon.src = 'icons/file-rotate-right.svg';
-      rotateIcon.alt = 'Rotate';
-      rotateIcon.className = 'icon-btn__icon icon-btn__icon--md';
-      rotateButton.appendChild(rotateIcon);
-
-      // Counter-scale (inside top-left corner)
-      applyCounterScale(rotateButton, 'top left');
-
-      container.appendChild(rotateButton);
-
-      // Crop button: styled div wrapper with centered icon,
-      // inside the photo, to the right of the rotate button.
-      const cropButton = document.createElement('div');
-      // Extra class so we can visually indicate active crop mode.
-      cropButton.className = 'resize-handle image-resize-handle icon-btn icon-btn--md crop-toggle';
-      cropButton.setAttribute('data-html2canvas-ignore', 'true');
-      // Inside the photo, next to rotate button
-      cropButton.style.left = '44px';
-      cropButton.style.top = '4px';
-      cropButton.onclick = e => {
-        e.stopPropagation();
-        currentPage = pageIndex;
-        toggleCrop(idx);
-      };
-
-      const cropIcon = document.createElement('img');
-      cropIcon.src = 'icons/crop.svg';
-      cropIcon.alt = 'Crop';
-      cropIcon.className = 'icon-btn__icon icon-btn__icon--md';
-      cropButton.appendChild(cropIcon);
-
-      // Counter-scale (inside top, to the right of rotate)
-      applyCounterScale(cropButton, 'top left');
-
-      container.appendChild(cropButton);
-
-      // Aspect-ratio preset buttons (only visible in crop mode).
-      if (inCropMode) {
-        const ratioButtons = [
-          { mode: '4:3', icon: 'icons/crop-landscape.svg', offset: 84 },
-          { mode: '3:4', icon: 'icons/crop-portrait.svg', offset: 124 },
-          { mode: '1:1', icon: 'icons/crop-square.svg', offset: 164 }
-        ];
-
-        ratioButtons.forEach(cfg => {
-          const btn = document.createElement('div');
-          let classNames = 'resize-handle image-resize-handle icon-btn icon-btn--md crop-ratio-toggle';
-          if (cropAspectMode === cfg.mode) classNames += ' crop-ratio-active';
-          btn.className = classNames;
-          btn.setAttribute('data-html2canvas-ignore', 'true');
-          btn.style.left = cfg.offset + 'px';
-          btn.style.top = '4px';
-
-          btn.onclick = e => {
-            e.stopPropagation();
-            currentPage = pageIndex;
-
-            const pageForAspect = pages[currentPage];
-            const photoForAspect = pageForAspect.photos[idx];
-
-            if (cropAspectMode === cfg.mode) {
-              // Toggle off if already active
-              cropAspectMode = null;
-            } else {
-              cropAspectMode = cfg.mode;
-              applyCropAspectPreset(photoForAspect, pageForAspect, cfg.mode);
-            }
-            render();
-          };
-
-          const iconEl = document.createElement('img');
-          iconEl.src = cfg.icon;
-          iconEl.alt = cfg.mode === '4:3'
-            ? 'Crop 4:3 landscape'
-            : cfg.mode === '3:4'
-            ? 'Crop 3:4 portrait'
-            : 'Crop 1:1 square';
-          iconEl.className = 'icon-btn__icon icon-btn__icon--md';
-          btn.appendChild(iconEl);
-
-          // Counter-scale (inside top, along top edge)
-          applyCounterScale(btn, 'top left');
-
-          container.appendChild(btn);
-        });
-      }
-
-      // Delete button: round control inside the photo
-      // at the bottom-left corner.
-      const deleteButton = document.createElement('div');
-      deleteButton.className = 'resize-handle image-resize-handle icon-btn icon-btn--md';
-      deleteButton.setAttribute('data-html2canvas-ignore', 'true');
-      deleteButton.style.left = '4px';
-      deleteButton.style.bottom = '4px';
-      deleteButton.onclick = e => {
-        e.stopPropagation();
-        currentPage = pageIndex;
-        deletePhoto(pageIndex, idx);
-      };
-
-      const deleteIcon = document.createElement('img');
-      deleteIcon.src = 'icons/delete-outline.svg';
-      deleteIcon.alt = 'Delete photo';
-      deleteIcon.className = 'icon-btn__icon icon-btn__icon--md';
-      deleteButton.appendChild(deleteIcon);
-
-      // Counter-scale (inside bottom-left corner)
-      applyCounterScale(deleteButton, 'bottom left');
-
-      container.appendChild(deleteButton);
-
-      // Size readout: aspect ratio and physical dimensions
-      // for the visible crop box, shown on the right edge
-      // of the selected image.
-      const wPx = Math.max(1, photo.width);
-      const hPx = Math.max(1, photo.height);
-      const wInt = Math.round(wPx);
-      const hInt = Math.round(hPx);
-      const gcd = (a, b) => (b === 0 ? a : gcd(b, a % b));
-      const g = gcd(wInt, hInt) || 1;
-      const arW = Math.round(wInt / g);
-      const arH = Math.round(hInt / g);
-      const mmWidth = wPx / 3;  // 3 px per mm
-      const mmHeight = hPx / 3;
-
-      const info = document.createElement('div');
-      info.className = 'photo-size-info';
-      info.setAttribute('data-html2canvas-ignore', 'true');
-      info.style.position = 'absolute';
-      info.style.right = '4px';
-      info.style.top = '4px';
-      info.style.fontSize = '11px';
-      info.style.lineHeight = '1.2';
-      info.style.color = '#333';
-      info.style.background = 'rgba(255, 255, 255, 0.9)';
-      info.style.padding = '2px 4px';
-      info.style.borderRadius = '3px';
-      info.style.whiteSpace = 'nowrap';
-      info.style.pointerEvents = 'none';
-
-      const aspectLine = document.createElement('div');
-      aspectLine.textContent = arW + ' : ' + arH;
-      const widthLine = document.createElement('div');
-      widthLine.style.display = 'flex';
-      widthLine.style.alignItems = 'center';
-      const widthIcon = document.createElement('img');
-      widthIcon.src = 'icons/arrow-expand-horizontal.svg';
-      widthIcon.alt = 'Width';
-      widthIcon.style.width = '14px';
-      widthIcon.style.height = '14px';
-      widthIcon.style.marginRight = '4px';
-      widthIcon.style.pointerEvents = 'none';
-      const widthText = document.createElement('span');
-      widthText.textContent = mmWidth.toFixed(1) + ' mm';
-      widthLine.appendChild(widthIcon);
-      widthLine.appendChild(widthText);
-
-      const heightLine = document.createElement('div');
-      heightLine.style.display = 'flex';
-      heightLine.style.alignItems = 'center';
-      const heightIcon = document.createElement('img');
-      heightIcon.src = 'icons/arrow-expand-vertical.svg';
-      heightIcon.alt = 'Height';
-      heightIcon.style.width = '14px';
-      heightIcon.style.height = '14px';
-      heightIcon.style.marginRight = '4px';
-      heightIcon.style.pointerEvents = 'none';
-      const heightText = document.createElement('span');
-      heightText.textContent = mmHeight.toFixed(1) + ' mm';
-      heightLine.appendChild(heightIcon);
-      heightLine.appendChild(heightText);
-
-      info.appendChild(aspectLine);
-      info.appendChild(widthLine);
-      info.appendChild(heightLine);
-      // Counter-scale size readout (inside right edge of photo)
-      applyCounterScale(info, 'right top');
-      container.appendChild(info);
+      // Create size info readout using helper
+      createSizeInfo(photo, container);
     }
 
     div.appendChild(container);
@@ -996,57 +1021,9 @@ function renderCollagePage() {
   wrapper.appendChild(div);
   app.appendChild(wrapper);
 
-  // For the currently active page, show an Add Page button
-  // centred under the page, and a Delete Page button
-  // aligned to the left, mirroring the per-photo controls.
+  // For the currently active page, show page control buttons
   if (pageIndex === currentPage) {
-    const actions = document.createElement('div');
-    actions.className = 'page-actions';
-    actions.style.position = 'relative';
-    actions.style.width = (pageWidthPx * scale) + 'px';
-    actions.style.height = '40px';
-    actions.style.margin = '8px auto 24px auto';
-
-    // Add Page button (centred)
-    const addButton = document.createElement('div');
-    addButton.className = 'resize-handle image-resize-handle icon-btn icon-btn--lg page-add-button';
-    addButton.style.left = '50%';
-    addButton.style.top = '0';
-    addButton.style.transform = 'translateX(-50%)';
-    addButton.onclick = e => {
-      e.stopPropagation();
-      window.addPage();
-    };
-
-    const plusIcon = document.createElement('img');
-    plusIcon.src = 'icons/plus.svg';
-    plusIcon.alt = 'Add page';
-    plusIcon.className = 'icon-btn__icon icon-btn__icon--lg';
-
-    addButton.appendChild(plusIcon);
-    actions.appendChild(addButton);
-
-    // Delete Page button (left-aligned), hidden if only
-    // one page exists.
-    if (pages.length > 1) {
-      const deletePageButton = document.createElement('div');
-      deletePageButton.className = 'resize-handle image-resize-handle icon-btn icon-btn--lg page-delete-button';
-      deletePageButton.style.left = '0';
-      deletePageButton.style.top = '0';
-      deletePageButton.onclick = e => {
-        e.stopPropagation();
-        window.removePage();
-      };
-
-      const deleteIcon = document.createElement('img');
-      deleteIcon.src = 'icons/file-remove-outline.svg';
-      deleteIcon.alt = 'Delete page';
-      deleteIcon.className = 'icon-btn__icon icon-btn__icon--lg';
-
-      deletePageButton.appendChild(deleteIcon);
-      actions.appendChild(deletePageButton);
-    }
-
+    const actions = createPageActions(pageWidthPx, scale);
     app.appendChild(actions);
   }
   });

