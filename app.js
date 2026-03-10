@@ -1398,8 +1398,11 @@ window.printCollage = async function() {
   // Temporarily hide selection chrome while capturing
   document.body.classList.add('printing-pdf');
 
-  // Create a PDF sized to A4 by default (portrait)
-  const pdf = new jsPDF('portrait', 'mm', 'a4');
+  // Determine PDF page size based on user's selected page size
+  const pageSize = pages[0].size;
+  const isLetter = pageSize.width === 216 && pageSize.height === 279;
+  const pdfFormat = isLetter ? 'letter' : 'a4';
+  const pdf = new jsPDF('portrait', 'mm', pdfFormat);
   const pdfWidth = pdf.internal.pageSize.getWidth();
   const pdfHeight = pdf.internal.pageSize.getHeight();
 
