@@ -61,7 +61,7 @@ const SAMPLE_PHOTO_LAYOUT = [
   {
     id: 'family-photo-2',
     src: 'sample-photos/family-photo-2.jpg',
-    xMm: 50 ,
+    xMm: 10 ,
     yMm: 120,
     widthMm: 190,
     heightMm: null,
