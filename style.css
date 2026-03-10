@@ -13,6 +13,9 @@ body {
   box-shadow: 0 2px 8px rgba(0,0,0,0.1);
   padding: 24px;
   position: relative;
+  /* Allow content to overflow horizontally when page is
+     scaled, needed for page controls on the left side. */
+  overflow-x: visible;
 }
 
 .page-controls, .photo-controls {
@@ -57,6 +60,8 @@ body {
   /* Prevent browser touch gestures (pan, zoom) so pointer
      events work reliably for drag/resize on touch devices. */
   touch-action: none;
+  /* Transform origin for responsive scaling */
+  transform-origin: top center;
 }
 
 /* Highlight the active page with the same blue outline
@@ -184,12 +189,35 @@ body.printing-pdf .help-overlay {
 
 /* No special handling needed for a removed crop overlay in PDF mode. */
 
+/* Wrapper for scaled collage page; reserves correct height
+   after CSS transform:scale() is applied. */
+.collage-page-wrapper {
+  position: relative;
+  /* JS sets the height and width based on scaled page dimensions */
+  margin-left: auto;
+  margin-right: auto;
+}
+
 @media (max-width: 600px) {
   #app {
+    /* Minimal padding on mobile; leave room for side controls */
     padding: 8px;
+    margin: 8px auto;
+    border-radius: 0;
+    box-shadow: none;
+  }
+  .page-controls {
+    margin-bottom: 16px;
+  }
+  .app-title {
+    font-size: 18px;
+  }
+  .app-subtitle,
+  .app-description {
+    font-size: 12px;
   }
   .collage-page {
-    min-height: 400px;
+    min-height: auto;
   }
 }
 

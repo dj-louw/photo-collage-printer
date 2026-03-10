@@ -15,7 +15,8 @@ let selectedPhoto = null;
 
 // Drag state (moving the photo container on the page)
 let dragIdx = null;
-let dragOffset = null;
+let dragStart = null;      // initial pointer position {x, y}
+let dragPhotoStart = null; // initial photo position {x, y}
 let dragging = false;
 
 // Resize state (handles on the bounding box / crop mask)
@@ -48,6 +49,45 @@ let cropImageOrigOffset = null;
 // Settings UI state
 let settingsOpen = false;
 let helpOpen = false;
+
+// Responsive scaling: tracks the current scale factor applied
+// to collage pages so coordinate calculations can compensate.
+let currentPageScale = 1;
+
+// Calculate the scale factor for the collage page based on
+// available viewport width. Leaves space for side controls
+// (80px left for add-image button, 40px right for handles).
+function calculatePageScale(pageWidthPx) {
+  // On desktop, use full size (scale 1)
+  const viewportWidth = window.innerWidth;
+  // Threshold below which we start scaling
+  const scaleThreshold = 800;
+  if (viewportWidth >= scaleThreshold) {
+    return 1;
+  }
+  // Reserve space for side controls and some padding
+  const sideMargin = 100; // 80px left + 20px right buffer
+  const availableWidth = viewportWidth - sideMargin;
+  const scale = Math.min(1, availableWidth / pageWidthPx);
+  // Don't scale below 0.3 to keep things usable
+  return Math.max(0.3, scale);
+}
+
+// Apply counter-scaling to control elements (handles, buttons)
+// inside a scaled page so they remain at their original visual
+// size. Takes the element and an origin string for transform-origin.
+// Preserves any existing transform on the element.
+function applyCounterScale(el, origin = 'center center') {
+  if (currentPageScale >= 1) return;
+  const counterScale = 1 / currentPageScale;
+  const existingTransform = el.style.transform || '';
+  if (existingTransform) {
+    el.style.transform = `${existingTransform} scale(${counterScale})`;
+  } else {
+    el.style.transform = `scale(${counterScale})`;
+  }
+  el.style.transformOrigin = origin;
+}
 
 // Declarative layout for the built-in sample photos. Edit
 // xMm / yMm / widthMm / heightMm / rotationTurns here to
@@ -156,10 +196,18 @@ function loadInitialSamplePhotos() {
 }
 
 function render() {
+  // Preserve scroll position before re-rendering to prevent
+  // mobile browsers from jumping to the top during drag/resize.
+  const scrollX = window.pageXOffset || document.documentElement.scrollLeft;
+  const scrollY = window.pageYOffset || document.documentElement.scrollTop;
+
   app.innerHTML = '';
   renderPageControls();
   renderPhotoControls();
   renderCollagePage();
+
+  // Restore scroll position after DOM is rebuilt
+  window.scrollTo(scrollX, scrollY);
 }
 
 function renderPageControls() {
@@ -594,6 +642,9 @@ function renderCollagePage() {
       plusImg.style.pointerEvents = 'none';
 
       addImageButton.appendChild(plusImg);
+      // Counter-scale so button stays at original size; anchor
+      // at right edge so it grows leftward away from the page.
+      applyCounterScale(addImageButton, 'right center');
       div.appendChild(addImageButton);
     }
 
@@ -670,12 +721,12 @@ function renderCollagePage() {
       // handle that looks like the image zoom handle.
       const handlePositions = inCropMode
         ? [
-            { name: 's', left: '50%', bottom: '-32px', cursor: 'ns-resize', transform: 'translateX(-50%)' },
-            { name: 'w', left: '-32px', top: '50%', cursor: 'ew-resize', transform: 'translateY(-50%)' },
-            { name: 'e', right: '-32px', top: '50%', cursor: 'ew-resize', transform: 'translateY(-50%)' }
+            { name: 's', left: '50%', bottom: '4px', cursor: 'ns-resize', transform: 'translateX(-50%)' },
+            { name: 'w', left: '4px', top: '50%', cursor: 'ew-resize', transform: 'translateY(-50%)' },
+            { name: 'e', right: '4px', top: '50%', cursor: 'ew-resize', transform: 'translateY(-50%)' }
           ]
         : [
-            { name: 'se', right: '-32px', bottom: '-32px', cursor: 'nwse-resize' }
+            { name: 'se', right: '4px', bottom: '4px', cursor: 'nwse-resize' }
           ];
 
       handlePositions.forEach(pos => {
@@ -764,6 +815,14 @@ function renderCollagePage() {
           }
         }
 
+        // Counter-scale the handle based on its position
+        let handleOrigin = 'center center';
+        if (pos.name === 's') handleOrigin = 'bottom center';
+        else if (pos.name === 'w') handleOrigin = 'left center';
+        else if (pos.name === 'e') handleOrigin = 'right center';
+        else if (pos.name === 'se') handleOrigin = 'bottom right';
+        applyCounterScale(handle, handleOrigin);
+
         container.appendChild(handle);
       });
 
@@ -779,8 +838,7 @@ function renderCollagePage() {
         imageFrame.style.height = photo.imageHeight + 'px';
 
         // Only show a single image resize handle in the
-        // lower-right corner, offset further out so it
-        // does not overlap the crop mask handle.
+        // lower-right corner, inside the image frame.
         const imgHandle = document.createElement('div');
         let imgHandleClass = 'resize-handle image-resize-handle';
         if (
@@ -794,8 +852,8 @@ function renderCollagePage() {
         }
         imgHandle.className = imgHandleClass;
         imgHandle.style.position = 'absolute';
-        imgHandle.style.right = '-32px';
-        imgHandle.style.bottom = '-32px';
+        imgHandle.style.right = '4px';
+        imgHandle.style.bottom = '4px';
         imgHandle.style.width = '32px';
         imgHandle.style.height = '32px';
         imgHandle.style.borderRadius = '50%';
@@ -825,14 +883,16 @@ function renderCollagePage() {
         handleIcon.style.pointerEvents = 'none';
         imgHandle.appendChild(handleIcon);
 
+        // Counter-scale the handle (inside bottom-right position)
+        applyCounterScale(imgHandle, 'bottom right');
+
         imageFrame.appendChild(imgHandle);
 
         container.appendChild(imageFrame);
       }
 
       // Rotate button: styled div wrapper with centered icon,
-      // aligned with the left edge of the visible crop box
-      // and placed just above it.
+      // inside the photo at the top-left corner.
       const rotateButton = document.createElement('div');
       rotateButton.className = 'resize-handle image-resize-handle';
       // Do not include this control when capturing the
@@ -840,10 +900,9 @@ function renderCollagePage() {
       // taint the canvas in some browsers.
       rotateButton.setAttribute('data-html2canvas-ignore', 'true');
       rotateButton.style.position = 'absolute';
-      // Left edge aligned with the crop box's left edge
-      rotateButton.style.left = '0';
-      // 8px above the top edge of the crop box
-      rotateButton.style.top = '-40px';
+      // Inside the photo, top-left corner
+      rotateButton.style.left = '4px';
+      rotateButton.style.top = '4px';
       rotateButton.style.width = '32px';
       rotateButton.style.height = '32px';
       rotateButton.style.borderRadius = '50%';
@@ -866,19 +925,21 @@ function renderCollagePage() {
       rotateIcon.style.pointerEvents = 'none';
       rotateButton.appendChild(rotateIcon);
 
+      // Counter-scale (inside top-left corner)
+      applyCounterScale(rotateButton, 'top left');
+
       container.appendChild(rotateButton);
 
       // Crop button: styled div wrapper with centered icon,
-      // placed to the right of the rotate button.
+      // inside the photo, to the right of the rotate button.
       const cropButton = document.createElement('div');
       // Extra class so we can visually indicate active crop mode.
       cropButton.className = 'resize-handle image-resize-handle crop-toggle';
       cropButton.setAttribute('data-html2canvas-ignore', 'true');
       cropButton.style.position = 'absolute';
-      // Placed to the right of the rotate button with a
-      // small horizontal gap, same size & vertical offset.
-      cropButton.style.left = '40px';
-      cropButton.style.top = '-40px';
+      // Inside the photo, next to rotate button
+      cropButton.style.left = '44px';
+      cropButton.style.top = '4px';
       cropButton.style.width = '32px';
       cropButton.style.height = '32px';
       cropButton.style.borderRadius = '50%';
@@ -901,14 +962,17 @@ function renderCollagePage() {
       cropIcon.style.pointerEvents = 'none';
       cropButton.appendChild(cropIcon);
 
+      // Counter-scale (inside top, to the right of rotate)
+      applyCounterScale(cropButton, 'top left');
+
       container.appendChild(cropButton);
 
       // Aspect-ratio preset buttons (only visible in crop mode).
       if (inCropMode) {
         const ratioButtons = [
-          { mode: '4:3', icon: 'icons/crop-landscape.svg', offset: 80 },
-          { mode: '3:4', icon: 'icons/crop-portrait.svg', offset: 120 },
-          { mode: '1:1', icon: 'icons/crop-square.svg', offset: 160 }
+          { mode: '4:3', icon: 'icons/crop-landscape.svg', offset: 84 },
+          { mode: '3:4', icon: 'icons/crop-portrait.svg', offset: 124 },
+          { mode: '1:1', icon: 'icons/crop-square.svg', offset: 164 }
         ];
 
         ratioButtons.forEach(cfg => {
@@ -919,7 +983,7 @@ function renderCollagePage() {
           btn.setAttribute('data-html2canvas-ignore', 'true');
           btn.style.position = 'absolute';
           btn.style.left = cfg.offset + 'px';
-          btn.style.top = '-40px';
+          btn.style.top = '4px';
           btn.style.width = '32px';
           btn.style.height = '32px';
           btn.style.borderRadius = '50%';
@@ -958,19 +1022,21 @@ function renderCollagePage() {
           iconEl.style.pointerEvents = 'none';
           btn.appendChild(iconEl);
 
+          // Counter-scale (inside top, along top edge)
+          applyCounterScale(btn, 'top left');
+
           container.appendChild(btn);
         });
       }
 
-      // Delete button: round control aligned with the
-      // bottom-left corner of the crop box. Only shown
-      // when the photo is selected.
+      // Delete button: round control inside the photo
+      // at the bottom-left corner.
       const deleteButton = document.createElement('div');
       deleteButton.className = 'resize-handle image-resize-handle';
       deleteButton.setAttribute('data-html2canvas-ignore', 'true');
       deleteButton.style.position = 'absolute';
-      deleteButton.style.left = '0';
-      deleteButton.style.bottom = '-40px';
+      deleteButton.style.left = '4px';
+      deleteButton.style.bottom = '4px';
       deleteButton.style.width = '32px';
       deleteButton.style.height = '32px';
       deleteButton.style.borderRadius = '50%';
@@ -993,6 +1059,9 @@ function renderCollagePage() {
       deleteIcon.style.pointerEvents = 'none';
       deleteButton.appendChild(deleteIcon);
 
+      // Counter-scale (inside bottom-left corner)
+      applyCounterScale(deleteButton, 'bottom left');
+
       container.appendChild(deleteButton);
 
       // Size readout: aspect ratio and physical dimensions
@@ -1013,9 +1082,8 @@ function renderCollagePage() {
       info.className = 'photo-size-info';
       info.setAttribute('data-html2canvas-ignore', 'true');
       info.style.position = 'absolute';
-      info.style.left = '100%';
-      info.style.top = '0';
-      info.style.marginLeft = '8px';
+      info.style.right = '4px';
+      info.style.top = '4px';
       info.style.fontSize = '11px';
       info.style.lineHeight = '1.2';
       info.style.color = '#333';
@@ -1060,13 +1128,32 @@ function renderCollagePage() {
       info.appendChild(aspectLine);
       info.appendChild(widthLine);
       info.appendChild(heightLine);
+      // Counter-scale size readout (inside right edge of photo)
+      applyCounterScale(info, 'right top');
       container.appendChild(info);
     }
 
     div.appendChild(container);
   });
 
-  app.appendChild(div);
+  // Calculate and apply responsive scaling
+  const scale = calculatePageScale(pageWidthPx);
+  currentPageScale = scale;
+  
+  if (scale < 1) {
+    div.style.transform = `scale(${scale})`;
+    div.style.transformOrigin = 'top left';
+  }
+
+  // Wrap page in a container that reserves the correct
+  // scaled dimensions and centers the page.
+  const wrapper = document.createElement('div');
+  wrapper.className = 'collage-page-wrapper';
+  wrapper.style.width = (pageWidthPx * scale) + 'px';
+  wrapper.style.height = (pageHeightPx * scale) + 'px';
+  wrapper.style.marginBottom = '24px';
+  wrapper.appendChild(div);
+  app.appendChild(wrapper);
 
   // For the currently active page, show an Add Page button
   // centred under the page, and a Delete Page button
@@ -1075,7 +1162,7 @@ function renderCollagePage() {
     const actions = document.createElement('div');
     actions.className = 'page-actions';
     actions.style.position = 'relative';
-    actions.style.width = pageWidthPx + 'px';
+    actions.style.width = (pageWidthPx * scale) + 'px';
     actions.style.height = '40px';
     actions.style.margin = '8px auto 24px auto';
 
@@ -1629,10 +1716,8 @@ function handlePointerDownOnImage(pageX, pageY, target, originalEvent) {
   } else {
     dragIdx = idx;
     dragging = true;
-    dragOffset = {
-      x: pageX - app.offsetLeft - photo.x,
-      y: pageY - app.offsetTop - photo.y
-    };
+    dragStart = { x: pageX, y: pageY };
+    dragPhotoStart = { x: photo.x, y: photo.y };
   }
   // Capture the pointer so we continue receiving events even
   // if the finger/pen moves outside the target element.
@@ -1662,8 +1747,9 @@ function handlePointerMove(pageX, pageY) {
    // Moving the image under a fixed crop mask
    if (cropMode && cropDragImage && cropPhotoIdx !== null) {
      const photo = pages[currentPage].photos[cropPhotoIdx];
-     const dx = pageX - cropImageDragStart.x;
-     const dy = pageY - cropImageDragStart.y;
+     // Scale the screen delta to page coordinates
+     const dx = (pageX - cropImageDragStart.x) / currentPageScale;
+     const dy = (pageY - cropImageDragStart.y) / currentPageScale;
 
      let newOffsetX = cropImageOrigOffset.x + dx;
      let newOffsetY = cropImageOrigOffset.y + dy;
@@ -1686,8 +1772,11 @@ function handlePointerMove(pageX, pageY) {
 
   if (dragging && dragIdx !== null) {
     const photo = pages[currentPage].photos[dragIdx];
-    let newX = pageX - app.offsetLeft - dragOffset.x;
-    let newY = pageY - app.offsetTop - dragOffset.y;
+    // Scale the screen delta to page coordinates
+    const dx = (pageX - dragStart.x) / currentPageScale;
+    const dy = (pageY - dragStart.y) / currentPageScale;
+    let newX = dragPhotoStart.x + dx;
+    let newY = dragPhotoStart.y + dy;
     newX = Math.max(0, Math.min(newX, pageWidth - photo.width));
     newY = Math.max(0, Math.min(newY, pageHeight - photo.height));
     photo.x = newX;
@@ -1698,8 +1787,9 @@ function handlePointerMove(pageX, pageY) {
 
   if (!resizing || resizePhotoIdx === null) return;
   const photo = pages[currentPage].photos[resizePhotoIdx];
-  const dx = pageX - resizeStart.x;
-  const dy = pageY - resizeStart.y;
+  // Scale screen delta to page coordinates
+  const dx = (pageX - resizeStart.x) / currentPageScale;
+  const dy = (pageY - resizeStart.y) / currentPageScale;
   const minSize = 20;
 
   // In crop mode, we can either resize the mask (container)
@@ -2042,7 +2132,8 @@ function handlePointerUp() {
   resizeOrig = null;
   dragging = false;
   dragIdx = null;
-  dragOffset = null;
+  dragStart = null;
+  dragPhotoStart = null;
   cropDragImage = false;
   cropImageDragStart = null;
   cropImageOrigOffset = null;
@@ -2064,6 +2155,16 @@ function handlePointerUp() {
 // Use pointerup and pointercancel instead of separate mouse/touch events
 document.addEventListener('pointerup', handlePointerUp);
 document.addEventListener('pointercancel', handlePointerUp);
+
+// Re-render on window resize to update responsive scaling
+let resizeTimeout = null;
+window.addEventListener('resize', function() {
+  // Debounce resize events to avoid excessive re-renders
+  if (resizeTimeout) clearTimeout(resizeTimeout);
+  resizeTimeout = setTimeout(() => {
+    render();
+  }, 100);
+});
 
 // Initial render with sample photos on the first page
 loadInitialSamplePhotos();
