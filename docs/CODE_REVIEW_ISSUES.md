@@ -136,11 +136,13 @@ Benefits: Logical grouping, easier debugging (`console.log(state)`), clear seria
 
 **Resolution:** Created `createIconButton(options)` helper function that consolidates the repeated pattern. Options include: `iconSrc`, `alt`, `onClick`, `size` ('sm'/'md'/'lg'), `extraClasses`, `position` ({left, right, top, bottom, transform}), `ignoreCanvas`, and `counterScale`. Updated all 7 button creation sites to use this helper, reducing code duplication significantly.
 
-### 12. CSS print rule has inconsistent formatting
+### 12. [FIXED] CSS print rule has inconsistent formatting
 **Location:** [style.css](../style.css#L266-L270)  
 **Issue:** `.photo-container` block inside `@media print` has unusual indentation.  
 **Reason:** Makes CSS harder to scan.  
 **Fix:** Normalize indentation.
+
+**Resolution:** Indentation normalized - all properties inside `.photo-container` now consistently use 4-space indentation.
 
 ### 13. [WONTIFIX] No accessibility features
 **Location:** Throughout  
@@ -148,8 +150,10 @@ Benefits: Logical grouping, easier debugging (`console.log(state)`), clear seria
 **Reason:** App is unusable for keyboard-only or screen reader users.  
 **Fix:** Add `role="button"`, `aria-label`, `tabindex`, keyboard event handlers.
 
-### 14. External CDN dependencies without fallback
+### 14. [FIXED] External CDN dependencies without fallback
 **Location:** [index.html](../index.html#L13-L14)  
 **Issue:** jspdf and html2canvas loaded from CDN without local fallback.  
 **Reason:** App won't work offline or if CDN is blocked.  
 **Fix:** Bundle locally or add graceful fallback messaging.
+
+**Resolution:** Downloaded jspdf 2.5.1 and html2canvas 1.4.1 to local `lib/` folder. Updated index.html to reference local files instead of CDN. App now works fully offline.
