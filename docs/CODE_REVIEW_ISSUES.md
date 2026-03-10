@@ -128,11 +128,13 @@ Benefits: Logical grouping, easier debugging (`console.log(state)`), clear seria
 
 **Resolution:** The offending line was part of `renderPageControls()`, which was removed entirely in Issue #8 when static UI elements were moved to HTML.
 
-### 11. Duplicated button creation pattern
+### 11. [FIXED] Duplicated button creation pattern
 **Location:** Throughout render functions  
 **Issue:** The pattern for creating icon buttons (div + img + styles) is repeated 15+ times.  
 **Reason:** DRY violation, harder to change button style globally.  
 **Fix:** Create helper `createIconButton(iconSrc, alt, onClick, options)`.
+
+**Resolution:** Created `createIconButton(options)` helper function that consolidates the repeated pattern. Options include: `iconSrc`, `alt`, `onClick`, `size` ('sm'/'md'/'lg'), `extraClasses`, `position` ({left, right, top, bottom, transform}), `ignoreCanvas`, and `counterScale`. Updated all 7 button creation sites to use this helper, reducing code duplication significantly.
 
 ### 12. CSS print rule has inconsistent formatting
 **Location:** [style.css](../style.css#L266-L270)  
@@ -140,7 +142,7 @@ Benefits: Logical grouping, easier debugging (`console.log(state)`), clear seria
 **Reason:** Makes CSS harder to scan.  
 **Fix:** Normalize indentation.
 
-### 13. No accessibility features
+### 13. [WONTIFIX] No accessibility features
 **Location:** Throughout  
 **Issue:** No ARIA labels, no keyboard navigation, no focus indicators for custom controls.  
 **Reason:** App is unusable for keyboard-only or screen reader users.  
@@ -151,19 +153,3 @@ Benefits: Logical grouping, easier debugging (`console.log(state)`), clear seria
 **Issue:** jspdf and html2canvas loaded from CDN without local fallback.  
 **Reason:** App won't work offline or if CDN is blocked.  
 **Fix:** Bundle locally or add graceful fallback messaging.
-
----
-
-## Summary
-
-| Severity | Count |
-|----------|-------|
-| High     | 3     |
-| Medium   | 5     |
-| Low      | 6     |
-
-The most impactful fixes would be:
-1. Fix PDF page size (#1)
-2. Fix file re-selection (#2)  
-3. Extract inline styles to CSS (#4)
-4. Add constants for magic numbers (#6)

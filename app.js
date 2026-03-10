@@ -157,6 +157,62 @@ function applyCounterScale(el, origin = 'center center') {
   el.style.transformOrigin = origin;
 }
 
+/**
+ * Creates an icon button element with standard styling.
+ * Consolidates the repeated pattern of div + img + classes.
+ * 
+ * @param {Object} options
+ * @param {string} options.iconSrc - Path to the icon image
+ * @param {string} options.alt - Alt text for the icon
+ * @param {function} options.onClick - Click handler
+ * @param {string} [options.size='md'] - Button size: 'sm', 'md', or 'lg'
+ * @param {string} [options.extraClasses=''] - Additional CSS classes
+ * @param {Object} [options.position] - Position styles {left, right, top, bottom, transform}
+ * @param {boolean} [options.ignoreCanvas=true] - Set data-html2canvas-ignore
+ * @param {string|boolean} [options.counterScale=false] - Transform origin for counter scale
+ * @returns {HTMLElement} The button element
+ */
+function createIconButton(options) {
+  const {
+    iconSrc,
+    alt,
+    onClick,
+    size = 'md',
+    extraClasses = '',
+    position = {},
+    ignoreCanvas = true,
+    counterScale = false,
+  } = options;
+
+  const btn = document.createElement('div');
+  btn.className = `resize-handle image-resize-handle icon-btn icon-btn--${size}${extraClasses ? ' ' + extraClasses : ''}`;
+  
+  if (ignoreCanvas) {
+    btn.setAttribute('data-html2canvas-ignore', 'true');
+  }
+  
+  // Apply position styles
+  if (position.left !== undefined) btn.style.left = position.left;
+  if (position.right !== undefined) btn.style.right = position.right;
+  if (position.top !== undefined) btn.style.top = position.top;
+  if (position.bottom !== undefined) btn.style.bottom = position.bottom;
+  if (position.transform !== undefined) btn.style.transform = position.transform;
+  
+  btn.onclick = onClick;
+
+  const icon = document.createElement('img');
+  icon.src = iconSrc;
+  icon.alt = alt;
+  icon.className = `icon-btn__icon icon-btn__icon--${size}`;
+  btn.appendChild(icon);
+
+  if (counterScale) {
+    applyCounterScale(btn, counterScale);
+  }
+
+  return btn;
+}
+
 // Declarative layout for the built-in sample photos. Edit
 // xMm / yMm / widthMm / heightMm / rotationTurns here to
 // change their initial position, size and rotation.
@@ -569,113 +625,83 @@ function createPhotoControls(pageIndex, idx, inCropMode, container) {
   const insetPx = CONTROL_INSET_PX + 'px';
 
   // Rotate button
-  const rotateButton = document.createElement('div');
-  rotateButton.className = 'resize-handle image-resize-handle icon-btn icon-btn--md';
-  rotateButton.setAttribute('data-html2canvas-ignore', 'true');
-  rotateButton.style.left = insetPx;
-  rotateButton.style.top = insetPx;
-  rotateButton.onclick = e => {
-    e.stopPropagation();
-    state.document.currentPage = pageIndex;
-    rotatePhoto(idx);
-  };
-
-  const rotateIcon = document.createElement('img');
-  rotateIcon.src = 'icons/file-rotate-right.svg';
-  rotateIcon.alt = 'Rotate';
-  rotateIcon.className = 'icon-btn__icon icon-btn__icon--md';
-  rotateButton.appendChild(rotateIcon);
-  applyCounterScale(rotateButton, 'top left');
+  const rotateButton = createIconButton({
+    iconSrc: 'icons/file-rotate-right.svg',
+    alt: 'Rotate',
+    onClick: e => {
+      e.stopPropagation();
+      state.document.currentPage = pageIndex;
+      rotatePhoto(idx);
+    },
+    position: { left: insetPx, top: insetPx },
+    counterScale: 'top left',
+  });
   container.appendChild(rotateButton);
 
   // Crop button
-  const cropButton = document.createElement('div');
-  cropButton.className = 'resize-handle image-resize-handle icon-btn icon-btn--md crop-toggle';
-  cropButton.setAttribute('data-html2canvas-ignore', 'true');
-  // Position to the right of rotate button (button width 40px + inset)
-  cropButton.style.left = (BUTTON_SIZE_LG_PX + CONTROL_INSET_PX) + 'px';
-  cropButton.style.top = insetPx;
-  cropButton.onclick = e => {
-    e.stopPropagation();
-    state.document.currentPage = pageIndex;
-    toggleCrop(idx);
-  };
-
-  const cropIcon = document.createElement('img');
-  cropIcon.src = 'icons/crop.svg';
-  cropIcon.alt = 'Crop';
-  cropIcon.className = 'icon-btn__icon icon-btn__icon--md';
-  cropButton.appendChild(cropIcon);
-  applyCounterScale(cropButton, 'top left');
+  const cropButton = createIconButton({
+    iconSrc: 'icons/crop.svg',
+    alt: 'Crop',
+    onClick: e => {
+      e.stopPropagation();
+      state.document.currentPage = pageIndex;
+      toggleCrop(idx);
+    },
+    extraClasses: 'crop-toggle',
+    position: { left: (BUTTON_SIZE_LG_PX + CONTROL_INSET_PX) + 'px', top: insetPx },
+    counterScale: 'top left',
+  });
   container.appendChild(cropButton);
 
   // Aspect-ratio preset buttons (only in crop mode)
   if (inCropMode) {
-    // Calculate button offsets: each button is 40px wide with 4px spacing
     const buttonSpacing = BUTTON_SIZE_LG_PX + CONTROL_INSET_PX;
     const ratioButtons = [
-      { mode: '4:3', icon: 'icons/crop-landscape.svg', offset: buttonSpacing * 2 },
-      { mode: '3:4', icon: 'icons/crop-portrait.svg', offset: buttonSpacing * 3 },
-      { mode: '1:1', icon: 'icons/crop-square.svg', offset: buttonSpacing * 4 }
+      { mode: '4:3', icon: 'icons/crop-landscape.svg', offset: buttonSpacing * 2, alt: 'Crop 4:3 landscape' },
+      { mode: '3:4', icon: 'icons/crop-portrait.svg', offset: buttonSpacing * 3, alt: 'Crop 3:4 portrait' },
+      { mode: '1:1', icon: 'icons/crop-square.svg', offset: buttonSpacing * 4, alt: 'Crop 1:1 square' }
     ];
 
     ratioButtons.forEach(cfg => {
-      const btn = document.createElement('div');
-      let classNames = 'resize-handle image-resize-handle icon-btn icon-btn--md crop-ratio-toggle';
-      if (state.crop.aspectMode === cfg.mode) classNames += ' crop-ratio-active';
-      btn.className = classNames;
-      btn.setAttribute('data-html2canvas-ignore', 'true');
-      btn.style.left = cfg.offset + 'px';
-      btn.style.top = insetPx;
+      const isActive = state.crop.aspectMode === cfg.mode;
+      const btn = createIconButton({
+        iconSrc: cfg.icon,
+        alt: cfg.alt,
+        onClick: e => {
+          e.stopPropagation();
+          state.document.currentPage = pageIndex;
 
-      btn.onclick = e => {
-        e.stopPropagation();
-        state.document.currentPage = pageIndex;
+          const pageForAspect = state.document.pages[state.document.currentPage];
+          const photoForAspect = pageForAspect.photos[idx];
 
-        const pageForAspect = state.document.pages[state.document.currentPage];
-        const photoForAspect = pageForAspect.photos[idx];
-
-        if (state.crop.aspectMode === cfg.mode) {
-          state.crop.aspectMode = null;
-        } else {
-          state.crop.aspectMode = cfg.mode;
-          applyCropAspectPreset(photoForAspect, pageForAspect, cfg.mode);
-        }
-        render();
-      };
-
-      const iconEl = document.createElement('img');
-      iconEl.src = cfg.icon;
-      iconEl.alt = cfg.mode === '4:3'
-        ? 'Crop 4:3 landscape'
-        : cfg.mode === '3:4'
-        ? 'Crop 3:4 portrait'
-        : 'Crop 1:1 square';
-      iconEl.className = 'icon-btn__icon icon-btn__icon--md';
-      btn.appendChild(iconEl);
-      applyCounterScale(btn, 'top left');
+          if (state.crop.aspectMode === cfg.mode) {
+            state.crop.aspectMode = null;
+          } else {
+            state.crop.aspectMode = cfg.mode;
+            applyCropAspectPreset(photoForAspect, pageForAspect, cfg.mode);
+          }
+          render();
+        },
+        extraClasses: 'crop-ratio-toggle' + (isActive ? ' crop-ratio-active' : ''),
+        position: { left: cfg.offset + 'px', top: insetPx },
+        counterScale: 'top left',
+      });
       container.appendChild(btn);
     });
   }
 
   // Delete button
-  const deleteButton = document.createElement('div');
-  deleteButton.className = 'resize-handle image-resize-handle icon-btn icon-btn--md';
-  deleteButton.setAttribute('data-html2canvas-ignore', 'true');
-  deleteButton.style.left = insetPx;
-  deleteButton.style.bottom = insetPx;
-  deleteButton.onclick = e => {
-    e.stopPropagation();
-    state.document.currentPage = pageIndex;
-    deletePhoto(pageIndex, idx);
-  };
-
-  const deleteIcon = document.createElement('img');
-  deleteIcon.src = 'icons/delete-outline.svg';
-  deleteIcon.alt = 'Delete photo';
-  deleteIcon.className = 'icon-btn__icon icon-btn__icon--md';
-  deleteButton.appendChild(deleteIcon);
-  applyCounterScale(deleteButton, 'bottom left');
+  const deleteButton = createIconButton({
+    iconSrc: 'icons/delete-outline.svg',
+    alt: 'Delete photo',
+    onClick: e => {
+      e.stopPropagation();
+      state.document.currentPage = pageIndex;
+      deletePhoto(pageIndex, idx);
+    },
+    position: { left: insetPx, bottom: insetPx },
+    counterScale: 'bottom left',
+  });
   container.appendChild(deleteButton);
 }
 
@@ -757,39 +783,34 @@ function createPageActions(pageWidthPx, scale) {
   actions.style.margin = '8px auto 24px auto';
 
   // Add Page button (centred)
-  const addButton = document.createElement('div');
-  addButton.className = 'resize-handle image-resize-handle icon-btn icon-btn--lg page-add-button';
-  addButton.style.left = '50%';
-  addButton.style.top = '0';
-  addButton.style.transform = 'translateX(-50%)';
-  addButton.onclick = e => {
-    e.stopPropagation();
-    window.addPage();
-  };
-
-  const plusIcon = document.createElement('img');
-  plusIcon.src = 'icons/plus.svg';
-  plusIcon.alt = 'Add page';
-  plusIcon.className = 'icon-btn__icon icon-btn__icon--lg';
-  addButton.appendChild(plusIcon);
+  const addButton = createIconButton({
+    iconSrc: 'icons/plus.svg',
+    alt: 'Add page',
+    onClick: e => {
+      e.stopPropagation();
+      window.addPage();
+    },
+    size: 'lg',
+    extraClasses: 'page-add-button',
+    position: { left: '50%', top: '0', transform: 'translateX(-50%)' },
+    ignoreCanvas: false,
+  });
   actions.appendChild(addButton);
 
   // Delete Page button (left-aligned), hidden if only one page
   if (state.document.pages.length > 1) {
-    const deletePageButton = document.createElement('div');
-    deletePageButton.className = 'resize-handle image-resize-handle icon-btn icon-btn--lg page-delete-button';
-    deletePageButton.style.left = '0';
-    deletePageButton.style.top = '0';
-    deletePageButton.onclick = e => {
-      e.stopPropagation();
-      window.removePage();
-    };
-
-    const deleteIcon = document.createElement('img');
-    deleteIcon.src = 'icons/file-remove-outline.svg';
-    deleteIcon.alt = 'Delete page';
-    deleteIcon.className = 'icon-btn__icon icon-btn__icon--lg';
-    deletePageButton.appendChild(deleteIcon);
+    const deletePageButton = createIconButton({
+      iconSrc: 'icons/file-remove-outline.svg',
+      alt: 'Delete page',
+      onClick: e => {
+        e.stopPropagation();
+        window.removePage();
+      },
+      size: 'lg',
+      extraClasses: 'page-delete-button',
+      position: { left: '0', top: '0' },
+      ignoreCanvas: false,
+    });
     actions.appendChild(deletePageButton);
   }
 
@@ -833,29 +854,23 @@ function renderCollagePage() {
     // to the left edge at the top, using the same plus icon
     // as Add Page. It triggers the hidden file input.
     if (pageIndex === state.document.currentPage) {
-      const addImageButton = document.createElement('div');
-      addImageButton.className = 'resize-handle image-resize-handle icon-btn icon-btn--lg page-add-image-button';
-      addImageButton.setAttribute('data-html2canvas-ignore', 'true');
-      // Position to the left of the page edge
-      addImageButton.style.left = '-' + ADD_IMAGE_BUTTON_OFFSET_PX + 'px';
-      addImageButton.style.top = '0';
-      addImageButton.onclick = e => {
-        e.stopPropagation();
-        const input = document.getElementById('photo-file-input');
-        if (input) {
-          input.click();
-        }
-      };
-
-      const plusImg = document.createElement('img');
-      plusImg.src = 'icons/image-plus.svg';
-      plusImg.alt = 'Add image';
-      plusImg.className = 'icon-btn__icon icon-btn__icon--lg';
-
-      addImageButton.appendChild(plusImg);
-      // Counter-scale so button stays at original size; anchor
-      // at right edge so it grows leftward away from the page.
-      applyCounterScale(addImageButton, 'right center');
+      const addImageButton = createIconButton({
+        iconSrc: 'icons/image-plus.svg',
+        alt: 'Add image',
+        onClick: e => {
+          e.stopPropagation();
+          const input = document.getElementById('photo-file-input');
+          if (input) {
+            input.click();
+          }
+        },
+        size: 'lg',
+        extraClasses: 'page-add-image-button',
+        position: { left: '-' + ADD_IMAGE_BUTTON_OFFSET_PX + 'px', top: '0' },
+        // Counter-scale so button stays at original size; anchor
+        // at right edge so it grows leftward away from the page.
+        counterScale: 'right center',
+      });
       div.appendChild(addImageButton);
     }
 
