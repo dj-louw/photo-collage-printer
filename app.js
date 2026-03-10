@@ -52,8 +52,8 @@ const SAMPLE_PHOTO_LAYOUT = [
   {
     id: 'family-photo-1',
     src: 'sample-photos/family-photo-1.jpg',
-    xMm: 15,
-    yMm: 15,
+    xMm: 10,
+    yMm: 10,
     widthMm: 95,
     heightMm: 95,
     rotationTurns: 0
@@ -61,8 +61,8 @@ const SAMPLE_PHOTO_LAYOUT = [
   {
     id: 'family-photo-2',
     src: 'sample-photos/family-photo-2.jpg',
-    xMm: 9,
-    yMm: 25,
+    xMm: 10 ,
+    yMm: 120,
     widthMm: 95,
     heightMm: 95,
     rotationTurns: 1
@@ -70,8 +70,8 @@ const SAMPLE_PHOTO_LAYOUT = [
   {
     id: 'family-photo-3',
     src: 'sample-photos/family-photo-3.jpg',
-    xMm: 45,
-    yMm: 120,
+    xMm: 110 ,
+    yMm: 10,
     widthMm: 95,
     heightMm: 95,
     rotationTurns: 0
