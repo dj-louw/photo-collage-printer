@@ -472,9 +472,9 @@ body.printing-pdf .help-overlay {
 
   /* Do not print selection outlines or resize handles */
   .photo-container {
-  border: none;
-  box-shadow: none;
-  outline: none;
+    border: none;
+    box-shadow: none;
+    outline: none;
   }
 
   .collage-page {
