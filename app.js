@@ -65,7 +65,7 @@ const SAMPLE_PHOTO_LAYOUT = [
     yMm: 120,
     widthMm: 190,
     heightMm: null,
-    rotationTurns: 1
+    rotationTurns: 0
   },
   {
     id: 'family-photo-3',
