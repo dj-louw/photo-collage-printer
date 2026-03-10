@@ -49,51 +49,78 @@ const PDF_EXPORT_SCALE = 4;
 // ─────────────────────────────────────────────────────────────
 // State
 // ─────────────────────────────────────────────────────────────
-let pages = [{
-  size: { ...PAGE_SIZE_A4 }, // A4 in mm
-  photos: []
-}];
-let currentPage = 0;
 
-// Selection state
-let selectedPhoto = null;
+/**
+ * Application state object. Separates persistable document data
+ * from transient interaction state.
+ * 
+ * - `document`: Serializable project data (pages, photos, positions)
+ * - `selection`: Currently selected photo
+ * - `drag`: Active drag operation state
+ * - `resize`: Active resize operation state
+ * - `pointer`: Pointer capture for touch/pen tracking
+ * - `crop`: Crop mode state
+ * - `ui`: UI-related state (scale factors, etc.)
+ */
+const state = {
+  // === PERSISTABLE (can be saved/exported) ===
+  document: {
+    pages: [{
+      size: { ...PAGE_SIZE_A4 }, // A4 in mm
+      photos: []
+    }],
+    currentPage: 0,
+  },
 
-// Drag state (moving the photo container on the page)
-let dragIdx = null;
-let dragStart = null;      // initial pointer position {x, y}
-let dragPhotoStart = null; // initial photo position {x, y}
-let dragging = false;
+  // === TRANSIENT (not persisted) ===
+  
+  // Selection state
+  selection: {
+    photoIdx: null,
+  },
 
-// Resize state (handles on the bounding box / crop mask)
-let resizing = false;
-let resizeStart = null;
-let resizePhotoIdx = null;
-let resizeOrig = null;
-let activeHandleElement = null;
+  // Drag state (moving the photo container on the page)
+  drag: {
+    active: false,
+    photoIdx: null,
+    startPointer: null,   // initial pointer position {x, y}
+    startPosition: null,  // initial photo position {x, y}
+  },
 
-// Pointer capture state for reliable touch/pen tracking
-let activePointerId = null;
-let capturedElement = null;
+  // Resize state (handles on the bounding box / crop mask)
+  resize: {
+    active: false,
+    photoIdx: null,
+    start: null,
+    orig: null,
+    handleElement: null,
+  },
 
-// Crop state
-let cropMode = false;        // whether crop mode is active
-let cropPhotoIdx = null;     // which photo is in crop mode
+  // Pointer capture state for reliable touch/pen tracking
+  pointer: {
+    activeId: null,
+    capturedElement: null,
+  },
 
-// Optional aspect-ratio lock for the crop mask while in
-// crop mode. When non-null, the crop box is constrained
-// to this ratio during mask-resize operations.
-// Values: '4:3' | '3:4' | '1:1'
-let cropAspectMode = null;
+  // Crop state
+  crop: {
+    active: false,        // whether crop mode is active
+    photoIdx: null,       // which photo is in crop mode
+    // Optional aspect-ratio lock for the crop mask.
+    // Values: '4:3' | '3:4' | '1:1' | null
+    aspectMode: null,
+    // When dragging the image (not the mask) in crop mode
+    draggingImage: false,
+    imageDragStart: null,
+    imageOrigOffset: null,
+  },
 
-// When in crop mode, dragging the image (not the mask) moves
-// the image underneath a stationary crop mask.
-let cropDragImage = false;
-let cropImageDragStart = null;
-let cropImageOrigOffset = null;
-
-// Responsive scaling: tracks the current scale factor applied
-// to collage pages so coordinate calculations can compensate.
-let currentPageScale = 1;
+  // UI state
+  ui: {
+    // Responsive scaling factor applied to collage pages
+    pageScale: 1,
+  },
+};
 
 // Calculate the scale factor for the collage page based on
 // available viewport width. Leaves space for side controls
@@ -119,8 +146,8 @@ function calculatePageScale(pageWidthPx) {
 // size. Takes the element and an origin string for transform-origin.
 // Preserves any existing transform on the element.
 function applyCounterScale(el, origin = 'center center') {
-  if (currentPageScale >= 1) return;
-  const counterScale = 1 / currentPageScale;
+  if (state.ui.pageScale >= 1) return;
+  const counterScale = 1 / state.ui.pageScale;
   const existingTransform = el.style.transform || '';
   if (existingTransform) {
     el.style.transform = `${existingTransform} scale(${counterScale})`;
@@ -166,7 +193,7 @@ const SAMPLE_PHOTO_LAYOUT = [
 // Load the declarative sample layout onto the first page
 // when the app starts, so new users see an example.
 function loadInitialSamplePhotos() {
-  const page = pages[0];
+  const page = state.document.pages[0];
   if (!page || page.photos.length > 0) return;
 
   SAMPLE_PHOTO_LAYOUT.forEach(config => {
@@ -211,7 +238,7 @@ function loadInitialSamplePhotos() {
 
       // Make family-photo-1 selected by default.
       if (config.id === 'family-photo-1') {
-        selectedPhoto = page.photos.length - 1;
+        state.selection.photoIdx = page.photos.length - 1;
       }
 
       // Apply any initial quarter-turn rotations declared
@@ -219,13 +246,13 @@ function loadInitialSamplePhotos() {
       // helper (subject to the same file:// security rules).
       const turns = config.rotationTurns || 0;
       if (turns > 0) {
-        const originalPage = currentPage;
-        currentPage = 0;
+        const originalPage = state.document.currentPage;
+        state.document.currentPage = 0;
         const photoIndex = page.photos.length - 1;
         for (let i = 0; i < turns; i++) {
           rotatePhoto(photoIndex);
         }
-        currentPage = originalPage;
+        state.document.currentPage = originalPage;
       } else {
         render();
       }
@@ -274,7 +301,7 @@ function toggleHelp(show) {
 
 // Update settings UI to reflect current page size
 function updateSettingsUI() {
-  const page = pages[currentPage];
+  const page = state.document.pages[state.document.currentPage];
   const isLetter = page.size.width === PAGE_SIZE_LETTER.width && page.size.height === PAGE_SIZE_LETTER.height;
   const currentSizeValue = isLetter ? 'Letter' : 'A4';
 
@@ -401,11 +428,11 @@ function createResizeHandles(pageIndex, idx, photo, inCropMode, container) {
     const handle = document.createElement('div');
     let handleClass = 'resize-handle image-resize-handle';
     if (
-      resizing &&
-      resizePhotoIdx === idx &&
-      resizeOrig &&
-      resizeOrig.kind === 'box' &&
-      resizeOrig.handle === pos.name
+      state.resize.active &&
+      state.resize.photoIdx === idx &&
+      state.resize.orig &&
+      state.resize.orig.kind === 'box' &&
+      state.resize.orig.handle === pos.name
     ) {
       handleClass += ' handle-active';
     }
@@ -423,7 +450,7 @@ function createResizeHandles(pageIndex, idx, photo, inCropMode, container) {
     handle.setAttribute('data-handle', pos.name);
 
     handle.onpointerdown = e => {
-      currentPage = pageIndex;
+      state.document.currentPage = pageIndex;
       startResize(e, idx, pos.name);
     };
 
@@ -497,11 +524,11 @@ function createImageFrame(pageIndex, idx, photo, container) {
   const imgHandle = document.createElement('div');
   let imgHandleClass = 'resize-handle image-resize-handle';
   if (
-    resizing &&
-    resizePhotoIdx === idx &&
-    resizeOrig &&
-    resizeOrig.kind === 'image' &&
-    resizeOrig.handle === 'se'
+    state.resize.active &&
+    state.resize.photoIdx === idx &&
+    state.resize.orig &&
+    state.resize.orig.kind === 'image' &&
+    state.resize.orig.handle === 'se'
   ) {
     imgHandleClass += ' handle-active';
   }
@@ -516,7 +543,7 @@ function createImageFrame(pageIndex, idx, photo, container) {
   imgHandle.setAttribute('data-handle', 'se');
 
   imgHandle.onpointerdown = e => {
-    currentPage = pageIndex;
+    state.document.currentPage = pageIndex;
     startImageResize(e, idx, 'se');
   };
 
@@ -549,7 +576,7 @@ function createPhotoControls(pageIndex, idx, inCropMode, container) {
   rotateButton.style.top = insetPx;
   rotateButton.onclick = e => {
     e.stopPropagation();
-    currentPage = pageIndex;
+    state.document.currentPage = pageIndex;
     rotatePhoto(idx);
   };
 
@@ -570,7 +597,7 @@ function createPhotoControls(pageIndex, idx, inCropMode, container) {
   cropButton.style.top = insetPx;
   cropButton.onclick = e => {
     e.stopPropagation();
-    currentPage = pageIndex;
+    state.document.currentPage = pageIndex;
     toggleCrop(idx);
   };
 
@@ -595,7 +622,7 @@ function createPhotoControls(pageIndex, idx, inCropMode, container) {
     ratioButtons.forEach(cfg => {
       const btn = document.createElement('div');
       let classNames = 'resize-handle image-resize-handle icon-btn icon-btn--md crop-ratio-toggle';
-      if (cropAspectMode === cfg.mode) classNames += ' crop-ratio-active';
+      if (state.crop.aspectMode === cfg.mode) classNames += ' crop-ratio-active';
       btn.className = classNames;
       btn.setAttribute('data-html2canvas-ignore', 'true');
       btn.style.left = cfg.offset + 'px';
@@ -603,15 +630,15 @@ function createPhotoControls(pageIndex, idx, inCropMode, container) {
 
       btn.onclick = e => {
         e.stopPropagation();
-        currentPage = pageIndex;
+        state.document.currentPage = pageIndex;
 
-        const pageForAspect = pages[currentPage];
+        const pageForAspect = state.document.pages[state.document.currentPage];
         const photoForAspect = pageForAspect.photos[idx];
 
-        if (cropAspectMode === cfg.mode) {
-          cropAspectMode = null;
+        if (state.crop.aspectMode === cfg.mode) {
+          state.crop.aspectMode = null;
         } else {
-          cropAspectMode = cfg.mode;
+          state.crop.aspectMode = cfg.mode;
           applyCropAspectPreset(photoForAspect, pageForAspect, cfg.mode);
         }
         render();
@@ -639,7 +666,7 @@ function createPhotoControls(pageIndex, idx, inCropMode, container) {
   deleteButton.style.bottom = insetPx;
   deleteButton.onclick = e => {
     e.stopPropagation();
-    currentPage = pageIndex;
+    state.document.currentPage = pageIndex;
     deletePhoto(pageIndex, idx);
   };
 
@@ -748,7 +775,7 @@ function createPageActions(pageWidthPx, scale) {
   actions.appendChild(addButton);
 
   // Delete Page button (left-aligned), hidden if only one page
-  if (pages.length > 1) {
+  if (state.document.pages.length > 1) {
     const deletePageButton = document.createElement('div');
     deletePageButton.className = 'resize-handle image-resize-handle icon-btn icon-btn--lg page-delete-button';
     deletePageButton.style.left = '0';
@@ -775,10 +802,10 @@ function renderCollagePage() {
   // page new photos are added to and which one the
   // page controls refer to, but you can scroll through
   // and interact with every page.
-  pages.forEach((page, pageIndex) => {
+  state.document.pages.forEach((page, pageIndex) => {
     const div = document.createElement('div');
     const pageClasses = ['collage-page'];
-    if (pageIndex === currentPage) {
+    if (pageIndex === state.document.currentPage) {
       pageClasses.push('active-page');
     }
     div.className = pageClasses.join(' ');
@@ -794,10 +821,10 @@ function renderCollagePage() {
     div.addEventListener('click', e => {
       const photoContainer = e.target.closest('.photo-container');
       if (!photoContainer) {
-        currentPage = pageIndex;
-        selectedPhoto = null;
-        cropMode = false;
-        cropPhotoIdx = null;
+        state.document.currentPage = pageIndex;
+        state.selection.photoIdx = null;
+        state.crop.active = false;
+        state.crop.photoIdx = null;
         render();
       }
     });
@@ -805,7 +832,7 @@ function renderCollagePage() {
     // For the active page, show an Add Image button attached
     // to the left edge at the top, using the same plus icon
     // as Add Page. It triggers the hidden file input.
-    if (pageIndex === currentPage) {
+    if (pageIndex === state.document.currentPage) {
       const addImageButton = document.createElement('div');
       addImageButton.className = 'resize-handle image-resize-handle icon-btn icon-btn--lg page-add-image-button';
       addImageButton.setAttribute('data-html2canvas-ignore', 'true');
@@ -846,10 +873,10 @@ function renderCollagePage() {
     // the photo on the active page is selected).
     const container = document.createElement('div');
     const classes = ['photo-container'];
-    const isOnActivePage = pageIndex === currentPage;
-    const isSelectedOnActivePage = isOnActivePage && selectedPhoto === idx;
+    const isOnActivePage = pageIndex === state.document.currentPage;
+    const isSelectedOnActivePage = isOnActivePage && state.selection.photoIdx === idx;
     if (isSelectedOnActivePage) classes.push('selected');
-    if (cropMode && isOnActivePage && cropPhotoIdx === idx) classes.push('cropping-active');
+    if (state.crop.active && isOnActivePage && state.crop.photoIdx === idx) classes.push('cropping-active');
     container.className = classes.join(' ');
     container.style.position = 'absolute';
     container.style.left = photo.x + 'px';
@@ -867,7 +894,7 @@ function renderCollagePage() {
     // Show resize/crop handles only for the selected
     // photo on the active page.
     if (isSelectedOnActivePage) {
-      const inCropMode = cropMode && cropPhotoIdx === idx;
+      const inCropMode = state.crop.active && state.crop.photoIdx === idx;
 
       // Create resize handles using helper
       createResizeHandles(pageIndex, idx, photo, inCropMode, container);
@@ -889,7 +916,7 @@ function renderCollagePage() {
 
   // Calculate and apply responsive scaling
   const scale = calculatePageScale(pageWidthPx);
-  currentPageScale = scale;
+  state.ui.pageScale = scale;
   
   if (scale < 1) {
     div.style.transform = `scale(${scale})`;
@@ -907,7 +934,7 @@ function renderCollagePage() {
   app.appendChild(wrapper);
 
   // For the currently active page, show page control buttons
-  if (pageIndex === currentPage) {
+  if (pageIndex === state.document.currentPage) {
     const actions = createPageActions(pageWidthPx, scale);
     app.appendChild(actions);
   }
@@ -916,16 +943,16 @@ function renderCollagePage() {
 
 // Page controls
 window.addPage = function() {
-  pages.push({ size: { ...PAGE_SIZE_A4 }, photos: [] });
-  currentPage = pages.length - 1;
+  state.document.pages.push({ size: { ...PAGE_SIZE_A4 }, photos: [] });
+  state.document.currentPage = state.document.pages.length - 1;
   render();
 };
 
 window.removePage = function() {
-  if (pages.length > 1) {
-    pages.splice(currentPage, 1);
-    currentPage = Math.max(0, currentPage - 1);
-    selectedPhoto = null;
+  if (state.document.pages.length > 1) {
+    state.document.pages.splice(state.document.currentPage, 1);
+    state.document.currentPage = Math.max(0, state.document.currentPage - 1);
+    state.selection.photoIdx = null;
     render();
   }
 };
@@ -935,7 +962,7 @@ window.changePageSize = function(size) {
     'A4': PAGE_SIZE_A4,
     'Letter': PAGE_SIZE_LETTER
   };
-  pages[currentPage].size = { ...sizes[size] };
+  state.document.pages[state.document.currentPage].size = { ...sizes[size] };
   render();
 };
 
@@ -1013,16 +1040,16 @@ function applyCropAspectPreset(photo, page, mode) {
 // Delete a photo from a specific page and clear any
 // selection/crop state on that page.
 function deletePhoto(pageIndex, idx) {
-  const page = pages[pageIndex];
+  const page = state.document.pages[pageIndex];
   if (!page) return;
   if (idx < 0 || idx >= page.photos.length) return;
 
   page.photos.splice(idx, 1);
 
-  if (pageIndex === currentPage) {
-    selectedPhoto = null;
-    cropMode = false;
-    cropPhotoIdx = null;
+  if (pageIndex === state.document.currentPage) {
+    state.selection.photoIdx = null;
+    state.crop.active = false;
+    state.crop.photoIdx = null;
   }
 
   render();
@@ -1037,7 +1064,7 @@ window.importPhoto = function(event) {
   reader.onload = function(ev) {
     const img = new Image();
     img.onload = function() {
-      const page = pages[currentPage];
+      const page = state.document.pages[state.document.currentPage];
       const pageWidthPx = page.size.width * PX_PER_MM;
       const targetWidth = pageWidthPx * 0.5; // 50% of page width
       const scale = targetWidth / img.naturalWidth;
@@ -1056,7 +1083,7 @@ window.importPhoto = function(event) {
         imageOffsetX: 0,
         imageOffsetY: 0
       });
-      selectedPhoto = page.photos.length - 1;
+      state.selection.photoIdx = page.photos.length - 1;
       render();
     };
     img.src = ev.target.result;
@@ -1078,7 +1105,7 @@ window.printCollage = async function() {
   document.body.classList.add('printing-pdf');
 
   // Determine PDF page size based on user's selected page size
-  const pageSize = pages[0].size;
+  const pageSize = state.document.pages[0].size;
   const isLetter = pageSize.width === 216 && pageSize.height === 279;
   const pdfFormat = isLetter ? 'letter' : 'a4';
   const pdf = new jsPDF('portrait', 'mm', pdfFormat);
@@ -1118,31 +1145,31 @@ window.printCollage = async function() {
 
 // Selection helper
 function selectPhoto(pageIndex, idx) {
-  currentPage = pageIndex;
-  selectedPhoto = idx;
+  state.document.currentPage = pageIndex;
+  state.selection.photoIdx = idx;
   // Leaving crop mode when switching selection keeps
   // the interaction model simple across pages.
-  cropMode = false;
-  cropPhotoIdx = null;
+  state.crop.active = false;
+  state.crop.photoIdx = null;
   render();
 }
 function toggleCrop(idx) {
   // Toggle crop mode for a given photo. Crops are non-destructive:
   // we never alter the underlying photo.src, only how it is shown
   // inside its bounding box via imageWidth/Height and offsets.
-  if (cropMode && cropPhotoIdx === idx) {
+  if (state.crop.active && state.crop.photoIdx === idx) {
     // Turning crop mode off for the same photo simply exits the
     // editing experience; the current mask stays in effect.
-    cropMode = false;
-    cropPhotoIdx = null;
+    state.crop.active = false;
+    state.crop.photoIdx = null;
     render();
     return;
   }
 
   // Switch crop focus to another photo (no commit step required).
-  cropMode = true;
-  cropPhotoIdx = idx;
-  selectedPhoto = idx;
+  state.crop.active = true;
+  state.crop.photoIdx = idx;
+  state.selection.photoIdx = idx;
   render();
 }
 
@@ -1150,7 +1177,7 @@ function toggleCrop(idx) {
 // This avoids CSS transform artefacts like letterboxing/cropping
 // because the underlying image data itself is rotated.
 function rotatePhoto(idx) {
-  const page = pages[currentPage];
+  const page = state.document.pages[state.document.currentPage];
   const photo = page.photos[idx];
 
    // When the app is opened directly from the file system
@@ -1286,28 +1313,28 @@ function startResize(e, idx, handle) {
   e.preventDefault();
   // Track the active handle element so we can style it
   // as pressed while the user is dragging.
-  if (activeHandleElement && activeHandleElement !== e.currentTarget) {
-    activeHandleElement.classList.remove('handle-active');
+  if (state.resize.handleElement && state.resize.handleElement !== e.currentTarget) {
+    state.resize.handleElement.classList.remove('handle-active');
   }
-  activeHandleElement = e.currentTarget || e.target;
-  if (activeHandleElement) {
-    activeHandleElement.classList.add('handle-active');
+  state.resize.handleElement = e.currentTarget || e.target;
+  if (state.resize.handleElement) {
+    state.resize.handleElement.classList.add('handle-active');
   }
   // Capture the pointer for reliable tracking during resize
-  if (e.pointerId !== undefined && activeHandleElement && activeHandleElement.setPointerCapture) {
+  if (e.pointerId !== undefined && state.resize.handleElement && state.resize.handleElement.setPointerCapture) {
     try {
-      activeHandleElement.setPointerCapture(e.pointerId);
-      activePointerId = e.pointerId;
-      capturedElement = activeHandleElement;
+      state.resize.handleElement.setPointerCapture(e.pointerId);
+      state.pointer.activeId = e.pointerId;
+      state.pointer.capturedElement = state.resize.handleElement;
     } catch (err) {
       // Pointer capture may fail in some edge cases; ignore.
     }
   }
-  resizing = true;
-  resizePhotoIdx = idx;
-  resizeStart = { x: e.pageX, y: e.pageY };
-  const photo = pages[currentPage].photos[idx];
-  resizeOrig = {
+  state.resize.active = true;
+  state.resize.photoIdx = idx;
+  state.resize.start = { x: e.pageX, y: e.pageY };
+  const photo = state.document.pages[state.document.currentPage].photos[idx];
+  state.resize.orig = {
     kind: 'box',
     width: photo.width,
     height: photo.height,
@@ -1326,28 +1353,28 @@ function startResize(e, idx, handle) {
 function startImageResize(e, idx, handle) {
   e.stopPropagation();
   e.preventDefault();
-  if (activeHandleElement && activeHandleElement !== e.currentTarget) {
-    activeHandleElement.classList.remove('handle-active');
+  if (state.resize.handleElement && state.resize.handleElement !== e.currentTarget) {
+    state.resize.handleElement.classList.remove('handle-active');
   }
-  activeHandleElement = e.currentTarget || e.target;
-  if (activeHandleElement) {
-    activeHandleElement.classList.add('handle-active');
+  state.resize.handleElement = e.currentTarget || e.target;
+  if (state.resize.handleElement) {
+    state.resize.handleElement.classList.add('handle-active');
   }
   // Capture the pointer for reliable tracking during resize
-  if (e.pointerId !== undefined && activeHandleElement && activeHandleElement.setPointerCapture) {
+  if (e.pointerId !== undefined && state.resize.handleElement && state.resize.handleElement.setPointerCapture) {
     try {
-      activeHandleElement.setPointerCapture(e.pointerId);
-      activePointerId = e.pointerId;
-      capturedElement = activeHandleElement;
+      state.resize.handleElement.setPointerCapture(e.pointerId);
+      state.pointer.activeId = e.pointerId;
+      state.pointer.capturedElement = state.resize.handleElement;
     } catch (err) {
       // Pointer capture may fail in some edge cases; ignore.
     }
   }
-  resizing = true;
-  resizePhotoIdx = idx;
-  resizeStart = { x: e.pageX, y: e.pageY };
-  const photo = pages[currentPage].photos[idx];
-  resizeOrig = {
+  state.resize.active = true;
+  state.resize.photoIdx = idx;
+  state.resize.start = { x: e.pageX, y: e.pageY };
+  const photo = state.document.pages[state.document.currentPage].photos[idx];
+  state.resize.orig = {
     kind: 'image',
     width: photo.width,
     height: photo.height,
@@ -1384,30 +1411,30 @@ function handlePointerDownOnImage(pageX, pageY, target, originalEvent) {
   // Make the page containing this photo the active page
   // so all subsequent drag/resize logic uses the right
   // page dimensions and photo list.
-  currentPage = pageIndex;
-  const photo = pages[currentPage].photos[idx];
+  state.document.currentPage = pageIndex;
+  const photo = state.document.pages[state.document.currentPage].photos[idx];
   // In crop mode on the active photo, dragging the image moves
   // the image under a stationary mask instead of moving the box.
-  if (cropMode && cropPhotoIdx === idx) {
-    cropDragImage = true;
-    cropImageDragStart = { x: pageX, y: pageY };
-    cropImageOrigOffset = {
+  if (state.crop.active && state.crop.photoIdx === idx) {
+    state.crop.draggingImage = true;
+    state.crop.imageDragStart = { x: pageX, y: pageY };
+    state.crop.imageOrigOffset = {
       x: photo.imageOffsetX || 0,
       y: photo.imageOffsetY || 0
     };
   } else {
-    dragIdx = idx;
-    dragging = true;
-    dragStart = { x: pageX, y: pageY };
-    dragPhotoStart = { x: photo.x, y: photo.y };
+    state.drag.photoIdx = idx;
+    state.drag.active = true;
+    state.drag.startPointer = { x: pageX, y: pageY };
+    state.drag.startPosition = { x: photo.x, y: photo.y };
   }
   // Capture the pointer so we continue receiving events even
   // if the finger/pen moves outside the target element.
   if (originalEvent && originalEvent.pointerId !== undefined && target.setPointerCapture) {
     try {
       target.setPointerCapture(originalEvent.pointerId);
-      activePointerId = originalEvent.pointerId;
-      capturedElement = target;
+      state.pointer.activeId = originalEvent.pointerId;
+      state.pointer.capturedElement = target;
     } catch (err) {
       // Pointer capture may fail in some edge cases; ignore.
     }
@@ -1423,18 +1450,18 @@ document.addEventListener('pointerdown', function(e) {
 });
 
 function handlePointerMove(pageX, pageY) {
-  const pageWidth = pages[currentPage].size.width * PX_PER_MM;
-  const pageHeight = pages[currentPage].size.height * PX_PER_MM;
+  const pageWidth = state.document.pages[state.document.currentPage].size.width * PX_PER_MM;
+  const pageHeight = state.document.pages[state.document.currentPage].size.height * PX_PER_MM;
 
    // Moving the image under a fixed crop mask
-   if (cropMode && cropDragImage && cropPhotoIdx !== null) {
-     const photo = pages[currentPage].photos[cropPhotoIdx];
+   if (state.crop.active && state.crop.draggingImage && state.crop.photoIdx !== null) {
+     const photo = state.document.pages[state.document.currentPage].photos[state.crop.photoIdx];
      // Scale the screen delta to page coordinates
-     const dx = (pageX - cropImageDragStart.x) / currentPageScale;
-     const dy = (pageY - cropImageDragStart.y) / currentPageScale;
+     const dx = (pageX - state.crop.imageDragStart.x) / state.ui.pageScale;
+     const dy = (pageY - state.crop.imageDragStart.y) / state.ui.pageScale;
 
-     let newOffsetX = cropImageOrigOffset.x + dx;
-     let newOffsetY = cropImageOrigOffset.y + dy;
+     let newOffsetX = state.crop.imageOrigOffset.x + dx;
+     let newOffsetY = state.crop.imageOrigOffset.y + dy;
 
      const minOffsetX = Math.min(0, photo.width - photo.imageWidth);
      const maxOffsetX = 0;
@@ -1452,13 +1479,13 @@ function handlePointerMove(pageX, pageY) {
      return;
    }
 
-  if (dragging && dragIdx !== null) {
-    const photo = pages[currentPage].photos[dragIdx];
+  if (state.drag.active && state.drag.photoIdx !== null) {
+    const photo = state.document.pages[state.document.currentPage].photos[state.drag.photoIdx];
     // Scale the screen delta to page coordinates
-    const dx = (pageX - dragStart.x) / currentPageScale;
-    const dy = (pageY - dragStart.y) / currentPageScale;
-    let newX = dragPhotoStart.x + dx;
-    let newY = dragPhotoStart.y + dy;
+    const dx = (pageX - state.drag.startPointer.x) / state.ui.pageScale;
+    const dy = (pageY - state.drag.startPointer.y) / state.ui.pageScale;
+    let newX = state.drag.startPosition.x + dx;
+    let newY = state.drag.startPosition.y + dy;
     newX = Math.max(0, Math.min(newX, pageWidth - photo.width));
     newY = Math.max(0, Math.min(newY, pageHeight - photo.height));
     photo.x = newX;
@@ -1467,47 +1494,47 @@ function handlePointerMove(pageX, pageY) {
     return;
   }
 
-  if (!resizing || resizePhotoIdx === null) return;
-  const photo = pages[currentPage].photos[resizePhotoIdx];
+  if (!state.resize.active || state.resize.photoIdx === null) return;
+  const photo = state.document.pages[state.document.currentPage].photos[state.resize.photoIdx];
   // Scale screen delta to page coordinates
-  const dx = (pageX - resizeStart.x) / currentPageScale;
-  const dy = (pageY - resizeStart.y) / currentPageScale;
+  const dx = (pageX - state.resize.start.x) / state.ui.pageScale;
+  const dy = (pageY - state.resize.start.y) / state.ui.pageScale;
 
   // In crop mode, we can either resize the mask (container)
   // or the underlying image (zoom). Distinguish via kind.
-  if (cropMode && cropPhotoIdx === resizePhotoIdx && resizeOrig && resizeOrig.kind === 'image') {
+  if (state.crop.active && state.crop.photoIdx === state.resize.photoIdx && state.resize.orig && state.resize.orig.kind === 'image') {
     // Resize the underlying image while keeping the mask fixed.
-    let newImageWidth = resizeOrig.imageWidth;
-    let newImageHeight = resizeOrig.imageHeight;
-    let newOffsetX = resizeOrig.imageOffsetX;
-    let newOffsetY = resizeOrig.imageOffsetY;
+    let newImageWidth = state.resize.orig.imageWidth;
+    let newImageHeight = state.resize.orig.imageHeight;
+    let newOffsetX = state.resize.orig.imageOffsetX;
+    let newOffsetY = state.resize.orig.imageOffsetY;
 
     let widthChange = 0;
     let heightChange = 0;
 
-    if (resizeOrig.handle === 'se') {
+    if (state.resize.orig.handle === 'se') {
       widthChange = dx;
       heightChange = dy;
-    } else if (resizeOrig.handle === 'sw') {
+    } else if (state.resize.orig.handle === 'sw') {
       widthChange = -dx;
       heightChange = dy;
-    } else if (resizeOrig.handle === 'ne') {
+    } else if (state.resize.orig.handle === 'ne') {
       widthChange = dx;
       heightChange = -dy;
-    } else if (resizeOrig.handle === 'nw') {
+    } else if (state.resize.orig.handle === 'nw') {
       widthChange = -dx;
       heightChange = -dy;
     }
 
-    if (!resizeOrig.dominant) {
-      resizeOrig.dominant = Math.abs(widthChange) >= Math.abs(heightChange) ? 'width' : 'height';
+    if (!state.resize.orig.dominant) {
+      state.resize.orig.dominant = Math.abs(widthChange) >= Math.abs(heightChange) ? 'width' : 'height';
     }
 
     let scale = 1;
-    if (resizeOrig.dominant === 'width') {
-      scale = (resizeOrig.imageWidth + widthChange) / resizeOrig.imageWidth;
+    if (state.resize.orig.dominant === 'width') {
+      scale = (state.resize.orig.imageWidth + widthChange) / state.resize.orig.imageWidth;
     } else {
-      scale = (resizeOrig.imageHeight + heightChange) / resizeOrig.imageHeight;
+      scale = (state.resize.orig.imageHeight + heightChange) / state.resize.orig.imageHeight;
     }
 
     // Prevent flipping or collapsing to zero, but no longer
@@ -1517,28 +1544,28 @@ function handlePointerMove(pageX, pageY) {
       scale = 0.01;
     }
 
-    newImageWidth = resizeOrig.imageWidth * scale;
-    newImageHeight = resizeOrig.imageHeight * scale;
+    newImageWidth = state.resize.orig.imageWidth * scale;
+    newImageHeight = state.resize.orig.imageHeight * scale;
 
     // Anchor the corner opposite to the dragged handle
-    if (resizeOrig.handle === 'se') {
+    if (state.resize.orig.handle === 'se') {
       // anchor top-left: offsets unchanged
-      newOffsetX = resizeOrig.imageOffsetX;
-      newOffsetY = resizeOrig.imageOffsetY;
-    } else if (resizeOrig.handle === 'sw') {
+      newOffsetX = state.resize.orig.imageOffsetX;
+      newOffsetY = state.resize.orig.imageOffsetY;
+    } else if (state.resize.orig.handle === 'sw') {
       // anchor top-right
-      const right = resizeOrig.imageOffsetX + resizeOrig.imageWidth;
+      const right = state.resize.orig.imageOffsetX + state.resize.orig.imageWidth;
       newOffsetX = right - newImageWidth;
-      newOffsetY = resizeOrig.imageOffsetY;
-    } else if (resizeOrig.handle === 'ne') {
+      newOffsetY = state.resize.orig.imageOffsetY;
+    } else if (state.resize.orig.handle === 'ne') {
       // anchor bottom-left
-      const bottom = resizeOrig.imageOffsetY + resizeOrig.imageHeight;
-      newOffsetX = resizeOrig.imageOffsetX;
+      const bottom = state.resize.orig.imageOffsetY + state.resize.orig.imageHeight;
+      newOffsetX = state.resize.orig.imageOffsetX;
       newOffsetY = bottom - newImageHeight;
-    } else if (resizeOrig.handle === 'nw') {
+    } else if (state.resize.orig.handle === 'nw') {
       // anchor bottom-right
-      const right = resizeOrig.imageOffsetX + resizeOrig.imageWidth;
-      const bottom = resizeOrig.imageOffsetY + resizeOrig.imageHeight;
+      const right = state.resize.orig.imageOffsetX + state.resize.orig.imageWidth;
+      const bottom = state.resize.orig.imageOffsetY + state.resize.orig.imageHeight;
       newOffsetX = right - newImageWidth;
       newOffsetY = bottom - newImageHeight;
     }
@@ -1560,27 +1587,27 @@ function handlePointerMove(pageX, pageY) {
     photo.imageOffsetY = newOffsetY;
 
     render();
-  } else if (cropMode && cropPhotoIdx === resizePhotoIdx) {
+  } else if (state.crop.active && state.crop.photoIdx === state.resize.photoIdx) {
     // Resize the crop mask (container) while the image stays
     // the same size underneath. In crop mode we use edge
     // handles (n, s, e, w) that move a single edge.
-    let newWidth = resizeOrig.width;
-    let newHeight = resizeOrig.height;
-    let newX = resizeOrig.x;
-    let newY = resizeOrig.y;
+    let newWidth = state.resize.orig.width;
+    let newHeight = state.resize.orig.height;
+    let newX = state.resize.orig.x;
+    let newY = state.resize.orig.y;
 
-    const handle = resizeOrig.handle;
+    const handle = state.resize.orig.handle;
 
     if (handle === 'e') {
-      newWidth = resizeOrig.width + dx;
+      newWidth = state.resize.orig.width + dx;
     } else if (handle === 'w') {
-      newWidth = resizeOrig.width - dx;
-      newX = resizeOrig.x + dx;
+      newWidth = state.resize.orig.width - dx;
+      newX = state.resize.orig.x + dx;
     } else if (handle === 's') {
-      newHeight = resizeOrig.height + dy;
+      newHeight = state.resize.orig.height + dy;
     } else if (handle === 'n') {
-      newHeight = resizeOrig.height - dy;
-      newY = resizeOrig.y + dy;
+      newHeight = state.resize.orig.height - dy;
+      newY = state.resize.orig.y + dy;
     }
 
     // If an aspect ratio is locked for the crop mask,
@@ -1589,46 +1616,46 @@ function handlePointerMove(pageX, pageY) {
     // on side handles and vertical drags on top/bottom
     // handles are all that is needed; no diagonal drag
     // is required.
-    if (cropAspectMode) {
+    if (state.crop.aspectMode) {
       let ratio = 1; // width / height
-      if (cropAspectMode === '4:3') {
+      if (state.crop.aspectMode === '4:3') {
         ratio = 4 / 3;
-      } else if (cropAspectMode === '3:4') {
+      } else if (state.crop.aspectMode === '3:4') {
         ratio = 3 / 4;
-      } else if (cropAspectMode === '1:1') {
+      } else if (state.crop.aspectMode === '1:1') {
         ratio = 1;
       }
 
       if (handle === 'e') {
         // Right edge: width driven by horizontal drag;
         // top-left corner remains anchored.
-        newWidth = resizeOrig.width + dx;
+        newWidth = state.resize.orig.width + dx;
         newHeight = newWidth / ratio;
-        newX = resizeOrig.x;
-        newY = resizeOrig.y;
+        newX = state.resize.orig.x;
+        newY = state.resize.orig.y;
       } else if (handle === 'w') {
         // Left edge: width driven by horizontal drag;
         // top-right corner remains anchored.
-        newWidth = resizeOrig.width - dx;
+        newWidth = state.resize.orig.width - dx;
         newHeight = newWidth / ratio;
-        const right = resizeOrig.x + resizeOrig.width;
+        const right = state.resize.orig.x + state.resize.orig.width;
         newX = right - newWidth;
-        newY = resizeOrig.y;
+        newY = state.resize.orig.y;
       } else if (handle === 's') {
         // Bottom edge: height driven by vertical drag;
         // top-left corner remains anchored.
-        newHeight = resizeOrig.height + dy;
+        newHeight = state.resize.orig.height + dy;
         newWidth = newHeight * ratio;
-        newX = resizeOrig.x;
-        newY = resizeOrig.y;
+        newX = state.resize.orig.x;
+        newY = state.resize.orig.y;
       } else if (handle === 'n') {
         // Top edge: height driven by vertical drag;
         // bottom-left corner remains anchored.
-        newHeight = resizeOrig.height - dy;
+        newHeight = state.resize.orig.height - dy;
         newWidth = newHeight * ratio;
-        const bottom = resizeOrig.y + resizeOrig.height;
+        const bottom = state.resize.orig.y + state.resize.orig.height;
         newY = bottom - newHeight;
-        newX = resizeOrig.x;
+        newX = state.resize.orig.x;
       }
     }
 
@@ -1675,77 +1702,77 @@ function handlePointerMove(pageX, pageY) {
   } else {
     // Normal resize: resize the bounding box and scale the
     // underlying image and any existing crop along with it.
-    let newWidth = resizeOrig.width;
-    let newHeight = resizeOrig.height;
-    let newX = resizeOrig.x;
-    let newY = resizeOrig.y;
+    let newWidth = state.resize.orig.width;
+    let newHeight = state.resize.orig.height;
+    let newX = state.resize.orig.x;
+    let newY = state.resize.orig.y;
 
-    const aspect = resizeOrig.width / resizeOrig.height;
-    const isCorner = ['nw', 'ne', 'se', 'sw'].includes(resizeOrig.handle);
+    const aspect = state.resize.orig.width / state.resize.orig.height;
+    const isCorner = ['nw', 'ne', 'se', 'sw'].includes(state.resize.orig.handle);
 
     if (isCorner) {
       let widthChange = 0;
       let heightChange = 0;
 
-      if (resizeOrig.handle === 'se') {
+      if (state.resize.orig.handle === 'se') {
         widthChange = dx;
         heightChange = dy;
-      } else if (resizeOrig.handle === 'sw') {
+      } else if (state.resize.orig.handle === 'sw') {
         widthChange = -dx;
         heightChange = dy;
-      } else if (resizeOrig.handle === 'ne') {
+      } else if (state.resize.orig.handle === 'ne') {
         widthChange = dx;
         heightChange = -dy;
-      } else if (resizeOrig.handle === 'nw') {
+      } else if (state.resize.orig.handle === 'nw') {
         widthChange = -dx;
         heightChange = -dy;
       }
 
-      if (!resizeOrig.dominant) {
-        resizeOrig.dominant = Math.abs(widthChange) >= Math.abs(heightChange) ? 'width' : 'height';
+      if (!state.resize.orig.dominant) {
+        state.resize.orig.dominant = Math.abs(widthChange) >= Math.abs(heightChange) ? 'width' : 'height';
       }
 
-      if (resizeOrig.dominant === 'width') {
-        let targetWidth = resizeOrig.width + widthChange;
+      if (state.resize.orig.dominant === 'width') {
+        let targetWidth = state.resize.orig.width + widthChange;
         if (targetWidth < MIN_PHOTO_SIZE_PX) targetWidth = MIN_PHOTO_SIZE_PX;
         newWidth = targetWidth;
         newHeight = newWidth / aspect;
       } else {
-        let targetHeight = resizeOrig.height + heightChange;
+        let targetHeight = state.resize.orig.height + heightChange;
         if (targetHeight < MIN_PHOTO_SIZE_PX) targetHeight = MIN_PHOTO_SIZE_PX;
         newHeight = targetHeight;
         newWidth = newHeight * aspect;
       }
 
-      if (resizeOrig.handle === 'sw' || resizeOrig.handle === 'nw') {
-        newX = resizeOrig.x + (resizeOrig.width - newWidth);
+      if (state.resize.orig.handle === 'sw' || state.resize.orig.handle === 'nw') {
+        newX = state.resize.orig.x + (state.resize.orig.width - newWidth);
       }
-      if (resizeOrig.handle === 'nw' || resizeOrig.handle === 'ne') {
-        newY = resizeOrig.y + (resizeOrig.height - newHeight);
+      if (state.resize.orig.handle === 'nw' || state.resize.orig.handle === 'ne') {
+        newY = state.resize.orig.y + (state.resize.orig.height - newHeight);
       }
     } else {
-      if (resizeOrig.handle === 'e') {
-        newWidth = resizeOrig.width + dx;
-      } else if (resizeOrig.handle === 'w') {
-        newWidth = resizeOrig.width - dx;
-        newX = resizeOrig.x + dx;
-      } else if (resizeOrig.handle === 's') {
-        newHeight = resizeOrig.height + dy;
-      } else if (resizeOrig.handle === 'n') {
-        newHeight = resizeOrig.height - dy;
-        newY = resizeOrig.y + dy;
+      if (state.resize.orig.handle === 'e') {
+        newWidth = state.resize.orig.width + dx;
+      } else if (state.resize.orig.handle === 'w') {
+        newWidth = state.resize.orig.width - dx;
+        newX = state.resize.orig.x + dx;
+      } else if (state.resize.orig.handle === 's') {
+        newHeight = state.resize.orig.height + dy;
+      } else if (state.resize.orig.handle === 'n') {
+        newHeight = state.resize.orig.height - dy;
+        newY = state.resize.orig.y + dy;
       }
 
       if (newWidth < MIN_PHOTO_SIZE_PX) {
         const diff = MIN_PHOTO_SIZE_PX - newWidth;
-        if (resizeOrig.handle === 'w') {
+        if (state.resize.orig.handle === 'w') {
           newX -= diff;
         }
         newWidth = MIN_PHOTO_SIZE_PX;
       }
       if (newHeight < MIN_PHOTO_SIZE_PX) {
         const diff = MIN_PHOTO_SIZE_PX - newHeight;
-        if (resizeOrig.handle === 'n') {
+        if (state.resize.orig.handle === 'n') {
           newY -= diff;
         }
         newHeight = MIN_PHOTO_SIZE_PX;
@@ -1776,11 +1803,11 @@ function handlePointerMove(pageX, pageY) {
     photo.y = newY;
 
     // Scale image and any existing crop with the box
-    const scale = newWidth / resizeOrig.width;
-    photo.imageWidth = resizeOrig.imageWidth * scale;
-    photo.imageHeight = resizeOrig.imageHeight * scale;
-    photo.imageOffsetX = resizeOrig.imageOffsetX * scale;
-    photo.imageOffsetY = resizeOrig.imageOffsetY * scale;
+    const scale = newWidth / state.resize.orig.width;
+    photo.imageWidth = state.resize.orig.imageWidth * scale;
+    photo.imageHeight = state.resize.orig.imageHeight * scale;
+    photo.imageOffsetX = state.resize.orig.imageOffsetX * scale;
+    photo.imageOffsetY = state.resize.orig.imageOffsetY * scale;
 
     render();
   }
@@ -1794,33 +1821,33 @@ document.addEventListener('pointermove', function(e) {
 function handlePointerUp() {
   // Capture whether a drag/resize was actually active so we
   // only force a re-render when something was being adjusted.
-  const hadInteraction = resizing || dragging || cropDragImage;
+  const hadInteraction = state.resize.active || state.drag.active || state.crop.draggingImage;
 
   // Release any captured pointer before resetting state
-  if (activePointerId !== null && capturedElement && capturedElement.releasePointerCapture) {
+  if (state.pointer.activeId !== null && state.pointer.capturedElement && state.pointer.capturedElement.releasePointerCapture) {
     try {
-      capturedElement.releasePointerCapture(activePointerId);
+      state.pointer.capturedElement.releasePointerCapture(state.pointer.activeId);
     } catch (err) {
       // Ignore if capture was already released.
     }
   }
-  activePointerId = null;
-  capturedElement = null;
+  state.pointer.activeId = null;
+  state.pointer.capturedElement = null;
 
-  resizing = false;
-  resizePhotoIdx = null;
-  resizeStart = null;
-  resizeOrig = null;
-  dragging = false;
-  dragIdx = null;
-  dragStart = null;
-  dragPhotoStart = null;
-  cropDragImage = false;
-  cropImageDragStart = null;
-  cropImageOrigOffset = null;
-  if (activeHandleElement) {
-    activeHandleElement.classList.remove('handle-active');
-    activeHandleElement = null;
+  state.resize.active = false;
+  state.resize.photoIdx = null;
+  state.resize.start = null;
+  state.resize.orig = null;
+  state.drag.active = false;
+  state.drag.photoIdx = null;
+  state.drag.startPointer = null;
+  state.drag.startPosition = null;
+  state.crop.draggingImage = false;
+  state.crop.imageDragStart = null;
+  state.crop.imageOrigOffset = null;
+  if (state.resize.handleElement) {
+    state.resize.handleElement.classList.remove('handle-active');
+    state.resize.handleElement = null;
   }
 
   // Only re-render when we were actually dragging/resizing.

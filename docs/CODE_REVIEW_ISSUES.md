@@ -79,7 +79,7 @@ Reduced `renderCollagePage()` from ~600 lines to ~140 lines.
 - `CROP_PRESET_*` - crop aspect ratio preset dimensions (mm)
 Replaced all occurrences throughout the codebase.
 
-### 7. No data persistence
+### 7. [WONTFIX] No data persistence
 **Location:** Global state variables  
 **Issue:** All work is lost on page refresh.  
 **Reason:** Users could accidentally lose their collage layout.  
@@ -103,11 +103,22 @@ Added new functions: `initGlobalControls()`, `toggleSettings()`, `toggleHelp()`,
 
 ## Low Priority
 
-### 9. Global state pollution
+### 9. [FIXED] Global state pollution
 **Location:** [app.js](../app.js#L7-L51)  
 **Issue:** All state is in global `let` variables.  
 **Reason:** Makes testing difficult, risk of accidental mutation, hard to reason about.  
 **Fix:** Encapsulate in a state object or use a simple state management pattern.
+
+**Resolution:** Consolidated 19 global variables into a structured `state` object with clear separation:
+- `state.document` - Persistable data (pages, photos, currentPage) for future save/export
+- `state.selection` - Currently selected photo
+- `state.drag` - Active drag operation state
+- `state.resize` - Active resize operation state
+- `state.pointer` - Pointer capture for touch/pen tracking
+- `state.crop` - Crop mode state
+- `state.ui` - UI state (page scale)
+
+Benefits: Logical grouping, easier debugging (`console.log(state)`), clear serialization path for persistence (`JSON.stringify(state.document)`), and safer state management.
 
 ### 10. Inconsistent indentation
 **Location:** [app.js](../app.js#L230) `   div.appendChild(description);`  
