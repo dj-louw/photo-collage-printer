@@ -15,3 +15,12 @@ This web-app was built using extensive help from an AI coding assistant. I'm not
 
 If you have a problem with my use of AI, then you are free to close this tab and go about your day.
 
+### Dependencies
+
+This app uses two third-party libraries for PDF export functionality:
+
+- **jspdf** (v2.5.1) - Generates PDF documents client-side
+- **html2canvas** (v1.4.1) - Renders HTML elements to canvas for PDF export
+
+Both libraries are bundled locally in the `lib/` folder to ensure the app works fully offline without relying on external CDNs.
+
