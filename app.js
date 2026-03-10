@@ -695,9 +695,28 @@ function renderCollagePage() {
         handle.style.borderRadius = inCropMode ? '0' : '50%';
         handle.style.cursor = pos.cursor;
         handle.setAttribute('data-handle', pos.name);
-        handle.onmousedown = e => {
+
+        const startBoxResize = evt => {
           currentPage = pageIndex;
-          startResize(e, idx, pos.name);
+          startResize(evt, idx, pos.name);
+        };
+
+        handle.onmousedown = e => {
+          startBoxResize(e);
+        };
+
+        handle.ontouchstart = e => {
+          if (!e.touches || e.touches.length === 0) return;
+          const t = e.touches[0];
+          const syntheticEvent = {
+            pageX: t.pageX,
+            pageY: t.pageY,
+            currentTarget: e.currentTarget,
+            target: e.target,
+            stopPropagation: () => e.stopPropagation(),
+            preventDefault: () => e.preventDefault()
+          };
+          startBoxResize(syntheticEvent);
         };
 
         // For the non-crop resize handle, embed the same
@@ -785,9 +804,28 @@ function renderCollagePage() {
         imgHandle.style.borderRadius = '50%';
         imgHandle.style.cursor = 'nwse-resize';
         imgHandle.setAttribute('data-handle', 'se');
-        imgHandle.onmousedown = e => {
+
+        const startImageBoxResize = evt => {
           currentPage = pageIndex;
-          startImageResize(e, idx, 'se');
+          startImageResize(evt, idx, 'se');
+        };
+
+        imgHandle.onmousedown = e => {
+          startImageBoxResize(e);
+        };
+
+        imgHandle.ontouchstart = e => {
+          if (!e.touches || e.touches.length === 0) return;
+          const t = e.touches[0];
+          const syntheticEvent = {
+            pageX: t.pageX,
+            pageY: t.pageY,
+            currentTarget: e.currentTarget,
+            target: e.target,
+            stopPropagation: () => e.stopPropagation(),
+            preventDefault: () => e.preventDefault()
+          };
+          startImageBoxResize(syntheticEvent);
         };
 
         // Center the custom resize icon inside the handle.
@@ -1551,12 +1589,13 @@ function startImageResize(e, idx, handle) {
   };
 }
 
-// Global mouse handlers for drag + resize
-document.addEventListener('mousedown', function(e) {
-  // Only start drag if clicking directly on an image (not handles/icons)
-  if (!(e.target.classList && e.target.classList.contains('photo'))) return;
+// Global pointer handlers for drag + resize
+function handlePointerDownOnImage(pageX, pageY, target, originalEvent) {
+  // Only start drag if interacting directly with an image
+  // (not handles/icons).
+  if (!(target.classList && target.classList.contains('photo'))) return;
 
-  const container = e.target.closest('[data-photo-index]');
+  const container = target.closest('[data-photo-index]');
   if (!container) return;
   const pageIndex = container.dataset.pageIndex ? Number(container.dataset.pageIndex) : 0;
   const idx = Number(container.dataset.photoIndex);
@@ -1571,7 +1610,7 @@ document.addEventListener('mousedown', function(e) {
   // the image under a stationary mask instead of moving the box.
   if (cropMode && cropPhotoIdx === idx) {
     cropDragImage = true;
-    cropImageDragStart = { x: e.pageX, y: e.pageY };
+    cropImageDragStart = { x: pageX, y: pageY };
     cropImageOrigOffset = {
       x: photo.imageOffsetX || 0,
       y: photo.imageOffsetY || 0
@@ -1580,22 +1619,34 @@ document.addEventListener('mousedown', function(e) {
     dragIdx = idx;
     dragging = true;
     dragOffset = {
-      x: e.pageX - app.offsetLeft - photo.x,
-      y: e.pageY - app.offsetTop - photo.y
+      x: pageX - app.offsetLeft - photo.x,
+      y: pageY - app.offsetTop - photo.y
     };
   }
-  e.preventDefault();
+  if (originalEvent && originalEvent.preventDefault) {
+    originalEvent.preventDefault();
+  }
+}
+
+document.addEventListener('mousedown', function(e) {
+  handlePointerDownOnImage(e.pageX, e.pageY, e.target, e);
 });
 
-document.addEventListener('mousemove', function(e) {
+document.addEventListener('touchstart', function(e) {
+  if (!e.touches || e.touches.length === 0) return;
+  const t = e.touches[0];
+  handlePointerDownOnImage(t.pageX, t.pageY, e.target, e);
+}, { passive: false });
+
+function handlePointerMove(pageX, pageY) {
   const pageWidth = pages[currentPage].size.width * 3;
   const pageHeight = pages[currentPage].size.height * 3;
 
    // Moving the image under a fixed crop mask
    if (cropMode && cropDragImage && cropPhotoIdx !== null) {
      const photo = pages[currentPage].photos[cropPhotoIdx];
-     const dx = e.pageX - cropImageDragStart.x;
-     const dy = e.pageY - cropImageDragStart.y;
+     const dx = pageX - cropImageDragStart.x;
+     const dy = pageY - cropImageDragStart.y;
 
      let newOffsetX = cropImageOrigOffset.x + dx;
      let newOffsetY = cropImageOrigOffset.y + dy;
@@ -1618,8 +1669,8 @@ document.addEventListener('mousemove', function(e) {
 
   if (dragging && dragIdx !== null) {
     const photo = pages[currentPage].photos[dragIdx];
-    let newX = e.pageX - app.offsetLeft - dragOffset.x;
-    let newY = e.pageY - app.offsetTop - dragOffset.y;
+    let newX = pageX - app.offsetLeft - dragOffset.x;
+    let newY = pageY - app.offsetTop - dragOffset.y;
     newX = Math.max(0, Math.min(newX, pageWidth - photo.width));
     newY = Math.max(0, Math.min(newY, pageHeight - photo.height));
     photo.x = newX;
@@ -1630,8 +1681,8 @@ document.addEventListener('mousemove', function(e) {
 
   if (!resizing || resizePhotoIdx === null) return;
   const photo = pages[currentPage].photos[resizePhotoIdx];
-  const dx = e.pageX - resizeStart.x;
-  const dy = e.pageY - resizeStart.y;
+  const dx = pageX - resizeStart.x;
+  const dy = pageY - resizeStart.y;
   const minSize = 20;
 
   // In crop mode, we can either resize the mask (container)
@@ -1945,9 +1996,23 @@ document.addEventListener('mousemove', function(e) {
 
     render();
   }
+}
+
+document.addEventListener('mousemove', function(e) {
+  handlePointerMove(e.pageX, e.pageY);
 });
 
-document.addEventListener('mouseup', function() {
+document.addEventListener('touchmove', function(e) {
+  if (!(dragging || resizing || (cropMode && cropDragImage))) return;
+  if (!e.touches || e.touches.length === 0) return;
+  const t = e.touches[0];
+  handlePointerMove(t.pageX, t.pageY);
+  // Prevent the page from scrolling while dragging/resizing
+  // inside the collage area.
+  e.preventDefault();
+}, { passive: false });
+
+function handlePointerUp() {
   // Capture whether a drag/resize was actually active so we
   // only force a re-render when something was being adjusted.
   const hadInteraction = resizing || dragging || cropDragImage;
@@ -1975,7 +2040,11 @@ document.addEventListener('mouseup', function() {
   if (hadInteraction) {
     setTimeout(() => render(), 0);
   }
-});
+}
+
+document.addEventListener('mouseup', handlePointerUp);
+document.addEventListener('touchend', handlePointerUp);
+document.addEventListener('touchcancel', handlePointerUp);
 
 // Initial render with sample photos on the first page
 loadInitialSamplePhotos();
