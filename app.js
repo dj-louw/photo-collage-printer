@@ -3,9 +3,54 @@
 
 const app = document.getElementById('app');
 
+// ─────────────────────────────────────────────────────────────
+// Constants
+// ─────────────────────────────────────────────────────────────
+
+// Conversion factor: pixels per millimetre. The collage is
+// rendered at 3px/mm (roughly 76 dpi) for on-screen display,
+// matching the PDF export resolution.
+const PX_PER_MM = 3;
+
+// Minimum width/height a photo box can be resized to (px).
+// Prevents collapsing to zero or negative dimensions.
+const MIN_PHOTO_SIZE_PX = 20;
+
+// Size of drag handles for resizing photos and crop masks (px).
+const HANDLE_SIZE_PX = 32;
+
+// Inset from photo edge for positioning controls and handles (px).
+const CONTROL_INSET_PX = 4;
+
+// Standard large button size used in the UI, e.g. page actions (px).
+const BUTTON_SIZE_LG_PX = 40;
+
+// Horizontal offset for the add-image button from the page edge (px).
+// Calculated as BUTTON_SIZE_LG_PX + HANDLE_SIZE_PX + gap.
+const ADD_IMAGE_BUTTON_OFFSET_PX = 72;
+
+// Standard page sizes in millimetres.
+const PAGE_SIZE_A4 = { width: 210, height: 297 };
+const PAGE_SIZE_LETTER = { width: 216, height: 279 };
+
+// Crop aspect ratio preset dimensions (mm).
+// 4:3 landscape: 150mm × 100mm (common photo print size).
+const CROP_PRESET_4_3_WIDTH_MM = 150;
+const CROP_PRESET_4_3_HEIGHT_MM = 100;
+// 3:4 portrait: 100mm × 150mm.
+const CROP_PRESET_3_4_WIDTH_MM = 100;
+const CROP_PRESET_3_4_HEIGHT_MM = 150;
+
+// Scale factor for html2canvas when generating PDFs.
+// 4 yields ~300 dpi (PX_PER_MM × 4 = 12 px/mm ≈ 305 dpi),
+// suitable for high-quality photo printing.
+const PDF_EXPORT_SCALE = 4;
+
+// ─────────────────────────────────────────────────────────────
 // State
+// ─────────────────────────────────────────────────────────────
 let pages = [{
-  size: { width: 210, height: 297 }, // A4 in mm
+  size: { ...PAGE_SIZE_A4 }, // A4 in mm
   photos: []
 }];
 let currentPage = 0;
@@ -128,8 +173,6 @@ function loadInitialSamplePhotos() {
   const page = pages[0];
   if (!page || page.photos.length > 0) return;
 
-  const pxPerMm = 3;
-
   SAMPLE_PHOTO_LAYOUT.forEach(config => {
     const img = new Image();
     img.onload = function() {
@@ -139,21 +182,21 @@ function loadInitialSamplePhotos() {
       let widthPx;
       let heightPx;
       if (config.widthMm) {
-        widthPx = config.widthMm * pxPerMm;
+        widthPx = config.widthMm * PX_PER_MM;
         heightPx = widthPx * (naturalH / naturalW);
       } else if (config.heightMm) {
-        heightPx = config.heightMm * pxPerMm;
+        heightPx = config.heightMm * PX_PER_MM;
         widthPx = heightPx * (naturalW / naturalH);
       } else {
         // Fallback: use 45% of page width.
-        const pageWidthPx = page.size.width * pxPerMm;
+        const pageWidthPx = page.size.width * PX_PER_MM;
         widthPx = pageWidthPx * 0.45;
         const scale = widthPx / naturalW;
         heightPx = naturalH * scale;
       }
 
-      const xPx = (config.xMm != null ? config.xMm * pxPerMm : 10);
-      const yPx = (config.yMm != null ? config.yMm * pxPerMm : 10);
+      const xPx = (config.xMm != null ? config.xMm * PX_PER_MM : 10);
+      const yPx = (config.yMm != null ? config.yMm * PX_PER_MM : 10);
 
       const photo = {
         src: config.src,
@@ -507,14 +550,15 @@ function createPhotoMask(photo, pageIndex, idx) {
 
 // Create resize handles for the selected photo
 function createResizeHandles(pageIndex, idx, photo, inCropMode, container) {
+  const insetPx = CONTROL_INSET_PX + 'px';
   const handlePositions = inCropMode
     ? [
-        { name: 's', left: '50%', bottom: '4px', cursor: 'ns-resize', transform: 'translateX(-50%)' },
-        { name: 'w', left: '4px', top: '50%', cursor: 'ew-resize', transform: 'translateY(-50%)' },
-        { name: 'e', right: '4px', top: '50%', cursor: 'ew-resize', transform: 'translateY(-50%)' }
+        { name: 's', left: '50%', bottom: insetPx, cursor: 'ns-resize', transform: 'translateX(-50%)' },
+        { name: 'w', left: insetPx, top: '50%', cursor: 'ew-resize', transform: 'translateY(-50%)' },
+        { name: 'e', right: insetPx, top: '50%', cursor: 'ew-resize', transform: 'translateY(-50%)' }
       ]
     : [
-        { name: 'se', right: '4px', bottom: '4px', cursor: 'nwse-resize' }
+        { name: 'se', right: insetPx, bottom: insetPx, cursor: 'nwse-resize' }
       ];
 
   handlePositions.forEach(pos => {
@@ -536,8 +580,8 @@ function createResizeHandles(pageIndex, idx, photo, inCropMode, container) {
     if (pos.top) handle.style.top = pos.top;
     if (pos.bottom) handle.style.bottom = pos.bottom;
     if (pos.transform) handle.style.transform = pos.transform;
-    handle.style.width = '32px';
-    handle.style.height = '32px';
+    handle.style.width = HANDLE_SIZE_PX + 'px';
+    handle.style.height = HANDLE_SIZE_PX + 'px';
     handle.style.borderRadius = inCropMode ? '0' : '50%';
     handle.style.cursor = pos.cursor;
     handle.setAttribute('data-handle', pos.name);
@@ -627,10 +671,10 @@ function createImageFrame(pageIndex, idx, photo, container) {
   }
   imgHandle.className = imgHandleClass;
   imgHandle.style.position = 'absolute';
-  imgHandle.style.right = '4px';
-  imgHandle.style.bottom = '4px';
-  imgHandle.style.width = '32px';
-  imgHandle.style.height = '32px';
+  imgHandle.style.right = CONTROL_INSET_PX + 'px';
+  imgHandle.style.bottom = CONTROL_INSET_PX + 'px';
+  imgHandle.style.width = HANDLE_SIZE_PX + 'px';
+  imgHandle.style.height = HANDLE_SIZE_PX + 'px';
   imgHandle.style.borderRadius = '50%';
   imgHandle.style.cursor = 'nwse-resize';
   imgHandle.setAttribute('data-handle', 'se');
@@ -659,12 +703,14 @@ function createImageFrame(pageIndex, idx, photo, container) {
 
 // Create photo control buttons (rotate, crop, ratio presets, delete)
 function createPhotoControls(pageIndex, idx, inCropMode, container) {
+  const insetPx = CONTROL_INSET_PX + 'px';
+
   // Rotate button
   const rotateButton = document.createElement('div');
   rotateButton.className = 'resize-handle image-resize-handle icon-btn icon-btn--md';
   rotateButton.setAttribute('data-html2canvas-ignore', 'true');
-  rotateButton.style.left = '4px';
-  rotateButton.style.top = '4px';
+  rotateButton.style.left = insetPx;
+  rotateButton.style.top = insetPx;
   rotateButton.onclick = e => {
     e.stopPropagation();
     currentPage = pageIndex;
@@ -683,8 +729,9 @@ function createPhotoControls(pageIndex, idx, inCropMode, container) {
   const cropButton = document.createElement('div');
   cropButton.className = 'resize-handle image-resize-handle icon-btn icon-btn--md crop-toggle';
   cropButton.setAttribute('data-html2canvas-ignore', 'true');
-  cropButton.style.left = '44px';
-  cropButton.style.top = '4px';
+  // Position to the right of rotate button (button width 40px + inset)
+  cropButton.style.left = (BUTTON_SIZE_LG_PX + CONTROL_INSET_PX) + 'px';
+  cropButton.style.top = insetPx;
   cropButton.onclick = e => {
     e.stopPropagation();
     currentPage = pageIndex;
@@ -701,10 +748,12 @@ function createPhotoControls(pageIndex, idx, inCropMode, container) {
 
   // Aspect-ratio preset buttons (only in crop mode)
   if (inCropMode) {
+    // Calculate button offsets: each button is 40px wide with 4px spacing
+    const buttonSpacing = BUTTON_SIZE_LG_PX + CONTROL_INSET_PX;
     const ratioButtons = [
-      { mode: '4:3', icon: 'icons/crop-landscape.svg', offset: 84 },
-      { mode: '3:4', icon: 'icons/crop-portrait.svg', offset: 124 },
-      { mode: '1:1', icon: 'icons/crop-square.svg', offset: 164 }
+      { mode: '4:3', icon: 'icons/crop-landscape.svg', offset: buttonSpacing * 2 },
+      { mode: '3:4', icon: 'icons/crop-portrait.svg', offset: buttonSpacing * 3 },
+      { mode: '1:1', icon: 'icons/crop-square.svg', offset: buttonSpacing * 4 }
     ];
 
     ratioButtons.forEach(cfg => {
@@ -714,7 +763,7 @@ function createPhotoControls(pageIndex, idx, inCropMode, container) {
       btn.className = classNames;
       btn.setAttribute('data-html2canvas-ignore', 'true');
       btn.style.left = cfg.offset + 'px';
-      btn.style.top = '4px';
+      btn.style.top = insetPx;
 
       btn.onclick = e => {
         e.stopPropagation();
@@ -750,8 +799,8 @@ function createPhotoControls(pageIndex, idx, inCropMode, container) {
   const deleteButton = document.createElement('div');
   deleteButton.className = 'resize-handle image-resize-handle icon-btn icon-btn--md';
   deleteButton.setAttribute('data-html2canvas-ignore', 'true');
-  deleteButton.style.left = '4px';
-  deleteButton.style.bottom = '4px';
+  deleteButton.style.left = insetPx;
+  deleteButton.style.bottom = insetPx;
   deleteButton.onclick = e => {
     e.stopPropagation();
     currentPage = pageIndex;
@@ -777,15 +826,15 @@ function createSizeInfo(photo, container) {
   const g = gcd(wInt, hInt) || 1;
   const arW = Math.round(wInt / g);
   const arH = Math.round(hInt / g);
-  const mmWidth = wPx / 3;
-  const mmHeight = hPx / 3;
+  const mmWidth = wPx / PX_PER_MM;
+  const mmHeight = hPx / PX_PER_MM;
 
   const info = document.createElement('div');
   info.className = 'photo-size-info';
   info.setAttribute('data-html2canvas-ignore', 'true');
   info.style.position = 'absolute';
-  info.style.right = '4px';
-  info.style.top = '4px';
+  info.style.right = CONTROL_INSET_PX + 'px';
+  info.style.top = CONTROL_INSET_PX + 'px';
   info.style.fontSize = '11px';
   info.style.lineHeight = '1.2';
   info.style.color = '#333';
@@ -841,7 +890,7 @@ function createPageActions(pageWidthPx, scale) {
   actions.className = 'page-actions';
   actions.style.position = 'relative';
   actions.style.width = (pageWidthPx * scale) + 'px';
-  actions.style.height = '40px';
+  actions.style.height = BUTTON_SIZE_LG_PX + 'px';
   actions.style.margin = '8px auto 24px auto';
 
   // Add Page button (centred)
@@ -897,8 +946,8 @@ function renderCollagePage() {
       pageClasses.push('active-page');
     }
     div.className = pageClasses.join(' ');
-    const pageWidthPx = page.size.width * 3;
-    const pageHeightPx = page.size.height * 3;
+    const pageWidthPx = page.size.width * PX_PER_MM;
+    const pageHeightPx = page.size.height * PX_PER_MM;
     div.style.width = pageWidthPx + 'px';
     div.style.height = pageHeightPx + 'px';
     div.dataset.pageIndex = String(pageIndex);
@@ -924,8 +973,8 @@ function renderCollagePage() {
       const addImageButton = document.createElement('div');
       addImageButton.className = 'resize-handle image-resize-handle icon-btn icon-btn--lg page-add-image-button';
       addImageButton.setAttribute('data-html2canvas-ignore', 'true');
-      // 40px button width + 32px gap => 72px offset
-      addImageButton.style.left = '-72px';
+      // Position to the left of the page edge
+      addImageButton.style.left = '-' + ADD_IMAGE_BUTTON_OFFSET_PX + 'px';
       addImageButton.style.top = '0';
       addImageButton.onclick = e => {
         e.stopPropagation();
@@ -1031,7 +1080,7 @@ function renderCollagePage() {
 
 // Page controls
 window.addPage = function() {
-  pages.push({ size: { width: 210, height: 297 }, photos: [] });
+  pages.push({ size: { ...PAGE_SIZE_A4 }, photos: [] });
   currentPage = pages.length - 1;
   render();
 };
@@ -1047,10 +1096,10 @@ window.removePage = function() {
 
 window.changePageSize = function(size) {
   const sizes = {
-    'A4': { width: 210, height: 297 },
-    'Letter': { width: 216, height: 279 }
+    'A4': PAGE_SIZE_A4,
+    'Letter': PAGE_SIZE_LETTER
   };
-  pages[currentPage].size = sizes[size];
+  pages[currentPage].size = { ...sizes[size] };
   render();
 };
 
@@ -1061,18 +1110,17 @@ window.changePageSize = function(size) {
 function applyCropAspectPreset(photo, page, mode) {
   if (!photo || !page) return;
 
-  const pxPerMm = 3;
   let desiredWidth = photo.width;
   let desiredHeight = photo.height;
 
   if (mode === '4:3') {
     // Landscape: 150mm × 100mm
-    desiredWidth = 150 * pxPerMm;  // 150mm wide
-    desiredHeight = 100 * pxPerMm; // 100mm tall
+    desiredWidth = CROP_PRESET_4_3_WIDTH_MM * PX_PER_MM;
+    desiredHeight = CROP_PRESET_4_3_HEIGHT_MM * PX_PER_MM;
   } else if (mode === '3:4') {
     // Portrait: 100mm × 150mm
-    desiredWidth = 100 * pxPerMm;  // 100mm wide
-    desiredHeight = 150 * pxPerMm; // 150mm tall
+    desiredWidth = CROP_PRESET_3_4_WIDTH_MM * PX_PER_MM;
+    desiredHeight = CROP_PRESET_3_4_HEIGHT_MM * PX_PER_MM;
   } else if (mode === '1:1') {
     // Square: keep roughly the current box size but enforce 1:1.
     const side = Math.min(photo.width, photo.height);
@@ -1082,8 +1130,8 @@ function applyCropAspectPreset(photo, page, mode) {
 
   if (desiredWidth <= 0 || desiredHeight <= 0) return;
 
-  const pageWidth = page.size.width * pxPerMm;
-  const pageHeight = page.size.height * pxPerMm;
+  const pageWidth = page.size.width * PX_PER_MM;
+  const pageHeight = page.size.height * PX_PER_MM;
 
   // Compute a uniform scale so the desired box fits within
   // the page. The crop box may extend beyond the image.
@@ -1101,9 +1149,8 @@ function applyCropAspectPreset(photo, page, mode) {
   let targetWidth = desiredWidth * scale;
   let targetHeight = desiredHeight * scale;
 
-  const minSize = 20;
-  if (targetWidth < minSize || targetHeight < minSize) {
-    const upScale = Math.max(minSize / targetWidth, minSize / targetHeight);
+  if (targetWidth < MIN_PHOTO_SIZE_PX || targetHeight < MIN_PHOTO_SIZE_PX) {
+    const upScale = Math.max(MIN_PHOTO_SIZE_PX / targetWidth, MIN_PHOTO_SIZE_PX / targetHeight);
     targetWidth *= upScale;
     targetHeight *= upScale;
   }
@@ -1155,7 +1202,7 @@ window.importPhoto = function(event) {
     const img = new Image();
     img.onload = function() {
       const page = pages[currentPage];
-      const pageWidthPx = page.size.width * 3;
+      const pageWidthPx = page.size.width * PX_PER_MM;
       const targetWidth = pageWidthPx * 0.5; // 50% of page width
       const scale = targetWidth / img.naturalWidth;
       const width = targetWidth;
@@ -1206,7 +1253,7 @@ window.printCollage = async function() {
   for (let i = 0; i < pageEls.length; i++) {
     const pageEl = pageEls[i];
     // Render each collage page to a high-resolution canvas
-    const canvas = await window.html2canvas(pageEl, { scale: 2 });
+    const canvas = await window.html2canvas(pageEl, { scale: PDF_EXPORT_SCALE });
     const imgData = canvas.toDataURL('image/png');
 
     const imgWidth = canvas.width;
@@ -1369,8 +1416,8 @@ function rotatePhoto(idx) {
     let newX = oldCenterX - newWidth / 2;
     let newY = oldCenterY - newHeight / 2;
 
-    const pageWidth = page.size.width * 3;
-    const pageHeight = page.size.height * 3;
+    const pageWidth = page.size.width * PX_PER_MM;
+    const pageHeight = page.size.height * PX_PER_MM;
 
     if (newX < 0) newX = 0;
     if (newY < 0) newY = 0;
@@ -1540,8 +1587,8 @@ document.addEventListener('pointerdown', function(e) {
 });
 
 function handlePointerMove(pageX, pageY) {
-  const pageWidth = pages[currentPage].size.width * 3;
-  const pageHeight = pages[currentPage].size.height * 3;
+  const pageWidth = pages[currentPage].size.width * PX_PER_MM;
+  const pageHeight = pages[currentPage].size.height * PX_PER_MM;
 
    // Moving the image under a fixed crop mask
    if (cropMode && cropDragImage && cropPhotoIdx !== null) {
@@ -1589,7 +1636,6 @@ function handlePointerMove(pageX, pageY) {
   // Scale screen delta to page coordinates
   const dx = (pageX - resizeStart.x) / currentPageScale;
   const dy = (pageY - resizeStart.y) / currentPageScale;
-  const minSize = 20;
 
   // In crop mode, we can either resize the mask (container)
   // or the underlying image (zoom). Distinguish via kind.
@@ -1750,19 +1796,19 @@ function handlePointerMove(pageX, pageY) {
       }
     }
 
-    if (newWidth < minSize) {
-      const diff = minSize - newWidth;
+    if (newWidth < MIN_PHOTO_SIZE_PX) {
+      const diff = MIN_PHOTO_SIZE_PX - newWidth;
       if (handle === 'w') {
         newX -= diff;
       }
-      newWidth = minSize;
+      newWidth = MIN_PHOTO_SIZE_PX;
     }
-    if (newHeight < minSize) {
-      const diff = minSize - newHeight;
+    if (newHeight < MIN_PHOTO_SIZE_PX) {
+      const diff = MIN_PHOTO_SIZE_PX - newHeight;
       if (handle === 'n') {
         newY -= diff;
       }
-      newHeight = minSize;
+      newHeight = MIN_PHOTO_SIZE_PX;
     }
 
     // Keep the mask within the page bounds
@@ -1781,8 +1827,8 @@ function handlePointerMove(pageX, pageY) {
       newHeight = pageHeight - newY;
     }
 
-    if (newWidth < minSize) newWidth = minSize;
-    if (newHeight < minSize) newHeight = minSize;
+    if (newWidth < MIN_PHOTO_SIZE_PX) newWidth = MIN_PHOTO_SIZE_PX;
+    if (newHeight < MIN_PHOTO_SIZE_PX) newHeight = MIN_PHOTO_SIZE_PX;
 
     photo.width = newWidth;
     photo.height = newHeight;
@@ -1825,12 +1871,12 @@ function handlePointerMove(pageX, pageY) {
 
       if (resizeOrig.dominant === 'width') {
         let targetWidth = resizeOrig.width + widthChange;
-        if (targetWidth < minSize) targetWidth = minSize;
+        if (targetWidth < MIN_PHOTO_SIZE_PX) targetWidth = MIN_PHOTO_SIZE_PX;
         newWidth = targetWidth;
         newHeight = newWidth / aspect;
       } else {
         let targetHeight = resizeOrig.height + heightChange;
-        if (targetHeight < minSize) targetHeight = minSize;
+        if (targetHeight < MIN_PHOTO_SIZE_PX) targetHeight = MIN_PHOTO_SIZE_PX;
         newHeight = targetHeight;
         newWidth = newHeight * aspect;
       }
@@ -1854,19 +1900,19 @@ function handlePointerMove(pageX, pageY) {
         newY = resizeOrig.y + dy;
       }
 
-      if (newWidth < minSize) {
-        const diff = minSize - newWidth;
+      if (newWidth < MIN_PHOTO_SIZE_PX) {
+        const diff = MIN_PHOTO_SIZE_PX - newWidth;
         if (resizeOrig.handle === 'w') {
           newX -= diff;
         }
-        newWidth = minSize;
+        newWidth = MIN_PHOTO_SIZE_PX;
       }
-      if (newHeight < minSize) {
-        const diff = minSize - newHeight;
+      if (newHeight < MIN_PHOTO_SIZE_PX) {
+        const diff = MIN_PHOTO_SIZE_PX - newHeight;
         if (resizeOrig.handle === 'n') {
           newY -= diff;
         }
-        newHeight = minSize;
+        newHeight = MIN_PHOTO_SIZE_PX;
       }
     }
 
@@ -1885,8 +1931,8 @@ function handlePointerMove(pageX, pageY) {
       newHeight = pageHeight - newY;
     }
 
-    if (newWidth < minSize) newWidth = minSize;
-    if (newHeight < minSize) newHeight = minSize;
+    if (newWidth < MIN_PHOTO_SIZE_PX) newWidth = MIN_PHOTO_SIZE_PX;
+    if (newHeight < MIN_PHOTO_SIZE_PX) newHeight = MIN_PHOTO_SIZE_PX;
 
     photo.width = newWidth;
     photo.height = newHeight;

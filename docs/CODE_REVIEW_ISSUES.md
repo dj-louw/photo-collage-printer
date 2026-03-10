@@ -62,11 +62,22 @@ Updated 15+ button/icon instances in app.js to use these classes instead of inli
 - `createPageActions(pageWidthPx, scale)` - creates page add/delete buttons
 Reduced `renderCollagePage()` from ~600 lines to ~140 lines.
 
-### 6. Magic numbers scattered throughout
+### 6. [FIXED] Magic numbers scattered throughout
 **Location:** Throughout `app.js`  
 **Issue:** Hardcoded values like `3` (pxPerMm), `32` (handle size), `40` (button size), `-72` (offset).  
 **Reason:** Changing these requires finding all occurrences.  
 **Fix:** Define constants at the top: `const PX_PER_MM = 3; const HANDLE_SIZE = 32;`
+
+**Resolution:** Added documented constants at the top of app.js:
+- `PX_PER_MM = 3` - pixels per millimetre conversion (px)
+- `MIN_PHOTO_SIZE_PX = 20` - minimum photo dimension (px)
+- `HANDLE_SIZE_PX = 32` - resize handle size (px)
+- `CONTROL_INSET_PX = 4` - control inset from edges (px)
+- `BUTTON_SIZE_LG_PX = 40` - large button size (px)
+- `ADD_IMAGE_BUTTON_OFFSET_PX = 72` - add-image button offset (px)
+- `PAGE_SIZE_A4`, `PAGE_SIZE_LETTER` - standard page sizes (mm)
+- `CROP_PRESET_*` - crop aspect ratio preset dimensions (mm)
+Replaced all occurrences throughout the codebase.
 
 ### 7. No data persistence
 **Location:** Global state variables  
