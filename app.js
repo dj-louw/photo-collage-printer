@@ -440,17 +440,10 @@ function initGlobalControls() {
 function createPhotoMask(photo, pageIndex, idx) {
   const mask = document.createElement('div');
   mask.className = 'photo-mask';
-  mask.style.position = 'absolute';
-  mask.style.left = '0';
-  mask.style.top = '0';
-  mask.style.right = '0';
-  mask.style.bottom = '0';
-  mask.style.overflow = 'hidden';
 
   const img = document.createElement('img');
   img.src = photo.src;
   img.className = 'photo';
-  img.style.position = 'absolute';
   img.style.left = (photo.imageOffsetX || 0) + 'px';
   img.style.top = (photo.imageOffsetY || 0) + 'px';
   img.style.width = photo.imageWidth + 'px';
@@ -492,16 +485,13 @@ function createResizeHandles(pageIndex, idx, photo, inCropMode, container) {
     ) {
       handleClass += ' handle-active';
     }
+    handleClass += inCropMode ? ' resize-handle--square' : ' resize-handle--round';
     handle.className = handleClass;
-    handle.style.position = 'absolute';
     if (pos.left) handle.style.left = pos.left;
     if (pos.right) handle.style.right = pos.right;
     if (pos.top) handle.style.top = pos.top;
     if (pos.bottom) handle.style.bottom = pos.bottom;
     if (pos.transform) handle.style.transform = pos.transform;
-    handle.style.width = HANDLE_SIZE_PX + 'px';
-    handle.style.height = HANDLE_SIZE_PX + 'px';
-    handle.style.borderRadius = inCropMode ? '0' : '50%';
     handle.style.cursor = pos.cursor;
     handle.setAttribute('data-handle', pos.name);
 
@@ -515,13 +505,7 @@ function createResizeHandles(pageIndex, idx, photo, inCropMode, container) {
       const icon = document.createElement('img');
       icon.src = 'icons/arrow-top-left-bottom-right.svg';
       icon.alt = 'Resize';
-      icon.style.position = 'absolute';
-      icon.style.left = '50%';
-      icon.style.top = '50%';
-      icon.style.transform = 'translate(-50%, -50%)';
-      icon.style.width = '20px';
-      icon.style.height = '20px';
-      icon.style.pointerEvents = 'none';
+      icon.className = 'resize-handle__icon';
       handle.appendChild(icon);
     }
 
@@ -544,13 +528,7 @@ function createResizeHandles(pageIndex, idx, photo, inCropMode, container) {
         const cropIconImg = document.createElement('img');
         cropIconImg.src = cropIconSrc;
         cropIconImg.alt = cropIconAlt;
-        cropIconImg.style.position = 'absolute';
-        cropIconImg.style.left = '50%';
-        cropIconImg.style.top = '50%';
-        cropIconImg.style.transform = 'translate(-50%, -50%)';
-        cropIconImg.style.width = '20px';
-        cropIconImg.style.height = '20px';
-        cropIconImg.style.pointerEvents = 'none';
+        cropIconImg.className = 'resize-handle__icon';
         handle.appendChild(cropIconImg);
       }
     }
@@ -571,7 +549,6 @@ function createResizeHandles(pageIndex, idx, photo, inCropMode, container) {
 function createImageFrame(pageIndex, idx, photo, container) {
   const imageFrame = document.createElement('div');
   imageFrame.className = 'image-frame';
-  imageFrame.style.position = 'absolute';
   imageFrame.style.left = (photo.imageOffsetX || 0) + 'px';
   imageFrame.style.top = (photo.imageOffsetY || 0) + 'px';
   imageFrame.style.width = photo.imageWidth + 'px';
@@ -588,13 +565,9 @@ function createImageFrame(pageIndex, idx, photo, container) {
   ) {
     imgHandleClass += ' handle-active';
   }
-  imgHandle.className = imgHandleClass;
-  imgHandle.style.position = 'absolute';
+  imgHandle.className = imgHandleClass + ' resize-handle--round';
   imgHandle.style.right = CONTROL_INSET_PX + 'px';
   imgHandle.style.bottom = CONTROL_INSET_PX + 'px';
-  imgHandle.style.width = HANDLE_SIZE_PX + 'px';
-  imgHandle.style.height = HANDLE_SIZE_PX + 'px';
-  imgHandle.style.borderRadius = '50%';
   imgHandle.style.cursor = 'nwse-resize';
   imgHandle.setAttribute('data-handle', 'se');
 
@@ -606,13 +579,7 @@ function createImageFrame(pageIndex, idx, photo, container) {
   const handleIcon = document.createElement('img');
   handleIcon.src = 'icons/arrow-top-left-bottom-right.svg';
   handleIcon.alt = 'Resize image';
-  handleIcon.style.position = 'absolute';
-  handleIcon.style.left = '50%';
-  handleIcon.style.top = '50%';
-  handleIcon.style.transform = 'translate(-50%, -50%)';
-  handleIcon.style.width = '20px';
-  handleIcon.style.height = '20px';
-  handleIcon.style.pointerEvents = 'none';
+  handleIcon.className = 'resize-handle__icon';
   imgHandle.appendChild(handleIcon);
 
   applyCounterScale(imgHandle, 'bottom right');
@@ -721,46 +688,29 @@ function createSizeInfo(photo, container) {
   const info = document.createElement('div');
   info.className = 'photo-size-info';
   info.setAttribute('data-html2canvas-ignore', 'true');
-  info.style.position = 'absolute';
   info.style.right = CONTROL_INSET_PX + 'px';
   info.style.top = CONTROL_INSET_PX + 'px';
-  info.style.fontSize = '11px';
-  info.style.lineHeight = '1.2';
-  info.style.color = '#333';
-  info.style.background = 'rgba(255, 255, 255, 0.9)';
-  info.style.padding = '2px 4px';
-  info.style.borderRadius = '3px';
-  info.style.whiteSpace = 'nowrap';
-  info.style.pointerEvents = 'none';
 
   const aspectLine = document.createElement('div');
   aspectLine.textContent = arW + ' : ' + arH;
 
   const widthLine = document.createElement('div');
-  widthLine.style.display = 'flex';
-  widthLine.style.alignItems = 'center';
+  widthLine.className = 'photo-size-info__line';
   const widthIcon = document.createElement('img');
   widthIcon.src = 'icons/arrow-expand-horizontal.svg';
   widthIcon.alt = 'Width';
-  widthIcon.style.width = '14px';
-  widthIcon.style.height = '14px';
-  widthIcon.style.marginRight = '4px';
-  widthIcon.style.pointerEvents = 'none';
+  widthIcon.className = 'photo-size-info__icon';
   const widthText = document.createElement('span');
   widthText.textContent = mmWidth.toFixed(1) + ' mm';
   widthLine.appendChild(widthIcon);
   widthLine.appendChild(widthText);
 
   const heightLine = document.createElement('div');
-  heightLine.style.display = 'flex';
-  heightLine.style.alignItems = 'center';
+  heightLine.className = 'photo-size-info__line';
   const heightIcon = document.createElement('img');
   heightIcon.src = 'icons/arrow-expand-vertical.svg';
   heightIcon.alt = 'Height';
-  heightIcon.style.width = '14px';
-  heightIcon.style.height = '14px';
-  heightIcon.style.marginRight = '4px';
-  heightIcon.style.pointerEvents = 'none';
+  heightIcon.className = 'photo-size-info__icon';
   const heightText = document.createElement('span');
   heightText.textContent = mmHeight.toFixed(1) + ' mm';
   heightLine.appendChild(heightIcon);
@@ -777,10 +727,8 @@ function createSizeInfo(photo, container) {
 function createPageActions(pageWidthPx, scale) {
   const actions = document.createElement('div');
   actions.className = 'page-actions';
-  actions.style.position = 'relative';
   actions.style.width = (pageWidthPx * scale) + 'px';
   actions.style.height = BUTTON_SIZE_LG_PX + 'px';
-  actions.style.margin = '8px auto 24px auto';
 
   // Add Page button (centred)
   const addButton = createIconButton({

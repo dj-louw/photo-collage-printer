@@ -154,13 +154,44 @@ body {
   overflow: hidden;
 }
 
+/* Photo image inside the mask; JS sets left/top/width/height dynamically. */
+.photo-mask .photo {
+  position: absolute;
+}
+
+/* ============================================
+   Resize Handles
+   ============================================ */
+
 .resize-handle {
+  position: absolute;
+  width: 32px;
+  height: 32px;
   border: 2px solid #fff;
   box-shadow: 0 1px 4px rgba(0,0,0,0.15);
   z-index: 10;
   pointer-events: auto;
   /* Prevent browser touch gestures on handles */
   touch-action: none;
+}
+
+.resize-handle--round {
+  border-radius: 50%;
+}
+
+.resize-handle--square {
+  border-radius: 0;
+}
+
+/* Icon centered inside a resize handle */
+.resize-handle__icon {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 20px;
+  height: 20px;
+  pointer-events: none;
 }
 
 /* Visual frame for the full underlying image while cropping. */
@@ -181,8 +212,40 @@ body {
   background-color: #4daaec;
 }
 
+/* Photo dimension info readout (top-right of selected photo) */
 .photo-size-info {
-  font-family: inherit;
+  position: absolute;
+  font-size: 11px;
+  line-height: 1.2;
+  color: #333;
+  background: rgba(255, 255, 255, 0.9);
+  padding: 2px 4px;
+  border-radius: 3px;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+/* Dimension line (width/height row) */
+.photo-size-info__line {
+  display: flex;
+  align-items: center;
+}
+
+/* Dimension icon styling */
+.photo-size-info__icon {
+  width: 14px;
+  height: 14px;
+  margin-right: 4px;
+  pointer-events: none;
+}
+
+/* ============================================
+   Page Actions (Add/Delete page buttons below page)
+   ============================================ */
+
+.page-actions {
+  position: relative;
+  margin: 8px auto 24px auto;
 }
 
 /* When a photo is in crop mode, make the crop toggle
