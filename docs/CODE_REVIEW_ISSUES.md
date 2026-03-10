@@ -34,11 +34,18 @@ Review date: March 10, 2026
 
 ## Medium Priority
 
-### 4. Inline styles instead of CSS classes
+### 4. [FIXED] Inline styles instead of CSS classes
 **Location:** Throughout `app.js`  
 **Issue:** Nearly all styling is done via `element.style.x = 'y'` instead of CSS classes.  
 **Reason:** Hard to maintain, override, or theme; bloats JavaScript; no hover/focus states possible in JS.  
 **Fix:** Extract common patterns (icon buttons, modals, flyouts) to CSS classes.
+
+**Resolution:** Created CSS classes in style.css:
+- `.icon-btn`, `.icon-btn--lg`, `.icon-btn--md`, `.icon-btn--sm` for circular icon buttons
+- `.icon-btn__icon`, `.icon-btn__icon--lg/md/sm` for centered icons
+- `.flyout`, `.flyout__title`, `.flyout__row` for dropdown menus
+- `.modal-overlay`, `.modal`, `.modal__title`, `.modal__content`, `.modal__row` for modal dialogs
+Updated 15+ button/icon instances in app.js to use these classes instead of inline styles.
 
 ### 5. Large monolithic functions
 **Location:** `renderCollagePage()` (~600 lines), `handlePointerMove()` (~200 lines)  

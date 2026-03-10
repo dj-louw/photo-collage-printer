@@ -250,16 +250,11 @@ function renderPhotoControls() {
   // Global Print button: circular icon in the upper-right
   // corner of the app container, with a small inset.
   const printButton = document.createElement('div');
-  printButton.className = 'resize-handle image-resize-handle app-print-button';
+  printButton.className = 'resize-handle image-resize-handle icon-btn icon-btn--lg app-print-button';
   printButton.setAttribute('data-html2canvas-ignore', 'true');
-  printButton.style.position = 'absolute';
   // 8px breathing room to the top/right of the button
   printButton.style.top = '8px';
   printButton.style.right = '8px';
-  printButton.style.width = '40px';
-  printButton.style.height = '40px';
-  printButton.style.borderRadius = '50%';
-  printButton.style.cursor = 'pointer';
   printButton.onclick = e => {
     e.stopPropagation();
     window.printCollage();
@@ -268,30 +263,19 @@ function renderPhotoControls() {
   const printIcon = document.createElement('img');
   printIcon.src = 'icons/printer-outline.svg';
   printIcon.alt = 'Print collage';
-  printIcon.style.position = 'absolute';
-  printIcon.style.left = '50%';
-  printIcon.style.top = '50%';
-  printIcon.style.transform = 'translate(-50%, -50%)';
-  printIcon.style.width = '20px';
-  printIcon.style.height = '20px';
-  printIcon.style.pointerEvents = 'none';
+  printIcon.className = 'icon-btn__icon icon-btn__icon--lg';
 
   printButton.appendChild(printIcon);
   app.appendChild(printButton);
 
   // Settings button: cog icon below the print button.
   const settingsButton = document.createElement('div');
-  settingsButton.className = 'resize-handle image-resize-handle app-settings-button';
+  settingsButton.className = 'resize-handle image-resize-handle icon-btn icon-btn--lg app-settings-button';
   settingsButton.setAttribute('data-html2canvas-ignore', 'true');
-  settingsButton.style.position = 'absolute';
   // 8px from right, placed below the print button with
   // an 8px vertical gap (8 + 40 + 8 = 56).
   settingsButton.style.top = '56px';
   settingsButton.style.right = '8px';
-  settingsButton.style.width = '40px';
-  settingsButton.style.height = '40px';
-  settingsButton.style.borderRadius = '50%';
-  settingsButton.style.cursor = 'pointer';
   settingsButton.onclick = e => {
     e.stopPropagation();
     settingsOpen = !settingsOpen;
@@ -301,13 +285,7 @@ function renderPhotoControls() {
   const settingsIcon = document.createElement('img');
   settingsIcon.src = 'icons/cog-outline.svg';
   settingsIcon.alt = 'Settings';
-  settingsIcon.style.position = 'absolute';
-  settingsIcon.style.left = '50%';
-  settingsIcon.style.top = '50%';
-  settingsIcon.style.transform = 'translate(-50%, -50%)';
-  settingsIcon.style.width = '20px';
-  settingsIcon.style.height = '20px';
-  settingsIcon.style.pointerEvents = 'none';
+  settingsIcon.className = 'icon-btn__icon icon-btn__icon--lg';
 
   settingsButton.appendChild(settingsIcon);
   app.appendChild(settingsButton);
@@ -315,16 +293,11 @@ function renderPhotoControls() {
   // GitHub button: link to the project repository,
   // stacked below the settings button.
   const githubButton = document.createElement('div');
-  githubButton.className = 'resize-handle image-resize-handle app-github-button';
+  githubButton.className = 'resize-handle image-resize-handle icon-btn icon-btn--lg app-github-button';
   githubButton.setAttribute('data-html2canvas-ignore', 'true');
-  githubButton.style.position = 'absolute';
   // 8px gap below the 40px-tall settings button
   githubButton.style.top = '104px';
   githubButton.style.right = '8px';
-  githubButton.style.width = '40px';
-  githubButton.style.height = '40px';
-  githubButton.style.borderRadius = '50%';
-  githubButton.style.cursor = 'pointer';
   githubButton.onclick = e => {
     e.stopPropagation();
     window.open('https://github.com/dj-louw/photo-collage-printer', '_blank');
@@ -333,29 +306,18 @@ function renderPhotoControls() {
   const githubIcon = document.createElement('img');
   githubIcon.src = 'icons/github.svg';
   githubIcon.alt = 'Open GitHub repository';
-  githubIcon.style.position = 'absolute';
-  githubIcon.style.left = '50%';
-  githubIcon.style.top = '50%';
-  githubIcon.style.transform = 'translate(-50%, -50%)';
-  githubIcon.style.width = '20px';
-  githubIcon.style.height = '20px';
-  githubIcon.style.pointerEvents = 'none';
+  githubIcon.className = 'icon-btn__icon icon-btn__icon--lg';
 
   githubButton.appendChild(githubIcon);
   app.appendChild(githubButton);
 
   // Help button: stacked below the GitHub button.
   const helpButton = document.createElement('div');
-  helpButton.className = 'resize-handle image-resize-handle app-help-button';
+  helpButton.className = 'resize-handle image-resize-handle icon-btn icon-btn--lg app-help-button';
   helpButton.setAttribute('data-html2canvas-ignore', 'true');
-  helpButton.style.position = 'absolute';
   // 8px gap below the 40px-tall GitHub button
   helpButton.style.top = '152px';
   helpButton.style.right = '8px';
-  helpButton.style.width = '40px';
-  helpButton.style.height = '40px';
-  helpButton.style.borderRadius = '50%';
-  helpButton.style.cursor = 'pointer';
   helpButton.onclick = e => {
     e.stopPropagation();
     helpOpen = true;
@@ -365,13 +327,7 @@ function renderPhotoControls() {
   const helpIcon = document.createElement('img');
   helpIcon.src = 'icons/help.svg';
   helpIcon.alt = 'Help';
-  helpIcon.style.position = 'absolute';
-  helpIcon.style.left = '50%';
-  helpIcon.style.top = '50%';
-  helpIcon.style.transform = 'translate(-50%, -50%)';
-  helpIcon.style.width = '20px';
-  helpIcon.style.height = '20px';
-  helpIcon.style.pointerEvents = 'none';
+  helpIcon.className = 'icon-btn__icon icon-btn__icon--lg';
 
   helpButton.appendChild(helpIcon);
   app.appendChild(helpButton);
@@ -383,28 +339,16 @@ function renderPhotoControls() {
     const currentSizeValue = isLetter ? 'Letter' : 'A4';
 
     const flyout = document.createElement('div');
-    flyout.className = 'settings-flyout';
-    flyout.style.position = 'absolute';
+    flyout.className = 'flyout settings-flyout';
     // Align the flyout with the top of the settings
     // button and place it to the left of the button
     // column, inside the app container.
     flyout.style.top = '56px';
     flyout.style.right = '56px';
-    flyout.style.minWidth = '160px';
-    flyout.style.background = '#ffffff';
-    flyout.style.boxShadow = '0 2px 8px rgba(0,0,0,0.15)';
-    flyout.style.borderRadius = '6px';
-    flyout.style.padding = '8px 0';
-    flyout.style.zIndex = '20';
 
     const sectionTitle = document.createElement('div');
-    sectionTitle.className = 'settings-section-title';
+    sectionTitle.className = 'flyout__title settings-section-title';
     sectionTitle.textContent = 'Page size';
-    sectionTitle.style.fontSize = '12px';
-    sectionTitle.style.fontWeight = 'bold';
-    sectionTitle.style.padding = '4px 12px 6px 12px';
-    sectionTitle.style.textTransform = 'uppercase';
-    sectionTitle.style.color = '#666';
     flyout.appendChild(sectionTitle);
 
     const sizes = [
@@ -414,13 +358,7 @@ function renderPhotoControls() {
 
     sizes.forEach(size => {
       const row = document.createElement('div');
-      let rowClass = 'settings-option';
-      if (currentSizeValue === size.value) {
-        rowClass += ' active';
-      }
-      row.className = rowClass;
-      row.style.padding = '6px 12px';
-      row.style.cursor = 'pointer';
+      row.className = 'flyout__row settings-option' + (currentSizeValue === size.value ? ' active' : '');
       if (currentSizeValue === size.value) {
         row.style.fontWeight = 'bold';
         row.style.background = '#e0f2ff';
@@ -440,70 +378,36 @@ function renderPhotoControls() {
   // Help modal overlay
   if (helpOpen) {
     const overlay = document.createElement('div');
-    overlay.className = 'help-overlay';
+    overlay.className = 'modal-overlay help-overlay';
     overlay.setAttribute('data-html2canvas-ignore', 'true');
-    overlay.style.position = 'fixed';
-    overlay.style.left = '0';
-    overlay.style.top = '0';
-    overlay.style.right = '0';
-    overlay.style.bottom = '0';
-    overlay.style.background = 'rgba(0,0,0,0.4)';
-    overlay.style.zIndex = '100';
     overlay.onclick = () => {
       helpOpen = false;
       render();
     };
 
     const modal = document.createElement('div');
-    modal.className = 'help-modal';
-    modal.style.position = 'absolute';
-    modal.style.left = '50%';
-    modal.style.top = '50%';
-    modal.style.transform = 'translate(-50%, -50%)';
-    modal.style.width = '420px';
-    modal.style.maxWidth = '90%';
-    modal.style.background = '#ffffff';
-    modal.style.borderRadius = '8px';
-    modal.style.boxShadow = '0 4px 12px rgba(0,0,0,0.25)';
-    modal.style.padding = '16px 20px 20px 20px';
-    modal.style.color = '#333';
+    modal.className = 'modal help-modal';
     modal.onclick = e => e.stopPropagation();
 
     const title = document.createElement('div');
+    title.className = 'modal__title';
     title.textContent = 'How to use Photo Collage Printer';
-    title.style.fontSize = '18px';
-    title.style.fontWeight = 'bold';
-    title.style.marginBottom = '8px';
     modal.appendChild(title);
 
     const sections = document.createElement('div');
-    sections.style.fontSize = '13px';
-    sections.style.lineHeight = '1.5';
+    sections.className = 'modal__content';
 
     const mkRow = (iconSrc, alt, text) => {
       const row = document.createElement('div');
-      row.style.display = 'flex';
-      row.style.alignItems = 'center';
-      row.style.marginBottom = '6px';
+      row.className = 'modal__row';
 
       const btn = document.createElement('div');
-      btn.className = 'resize-handle image-resize-handle';
-      btn.style.width = '28px';
-      btn.style.height = '28px';
-      btn.style.borderRadius = '50%';
-      btn.style.position = 'relative';
-      btn.style.marginRight = '8px';
+      btn.className = 'resize-handle image-resize-handle icon-btn--sm modal__row-icon';
 
       const ic = document.createElement('img');
       ic.src = iconSrc;
       ic.alt = alt;
-      ic.style.position = 'absolute';
-      ic.style.left = '50%';
-      ic.style.top = '50%';
-      ic.style.transform = 'translate(-50%, -50%)';
-      ic.style.width = '18px';
-      ic.style.height = '18px';
-      ic.style.pointerEvents = 'none';
+      ic.className = 'icon-btn__icon icon-btn__icon--sm';
 
       btn.appendChild(ic);
 
@@ -522,7 +426,7 @@ function renderPhotoControls() {
     sections.appendChild(mkRow('icons/delete-outline.svg', 'Delete', 'Delete the selected photo.'));
 
     const sep1 = document.createElement('div');
-    sep1.style.height = '8px';
+    sep1.className = 'modal__separator';
     modal.appendChild(sep1);
 
     sections.appendChild(mkRow('icons/file-rotate-right.svg', 'Rotate photo', 'Rotate the selected photo 90° clockwise.'));
@@ -530,7 +434,7 @@ function renderPhotoControls() {
     sections.appendChild(mkRow('icons/arrow-top-left-bottom-right.svg', 'Resize / zoom', 'Drag resize handles to resize photos or zoom while cropping.'));
 
     const sep2 = document.createElement('div');
-    sep2.style.height = '8px';
+    sep2.className = 'modal__separator';
     modal.appendChild(sep2);
 
     sections.appendChild(mkRow('icons/cog-outline.svg', 'Page size', 'Open settings to switch between A4 and Letter.'));
@@ -542,14 +446,9 @@ function renderPhotoControls() {
     // Icon-style close button in the top-right corner,
     // using the same round button style as other controls.
     const closeBtn = document.createElement('div');
-    closeBtn.className = 'resize-handle image-resize-handle help-close-button';
-    closeBtn.style.position = 'absolute';
+    closeBtn.className = 'resize-handle image-resize-handle icon-btn icon-btn--sm help-close-button';
     closeBtn.style.top = '8px';
     closeBtn.style.right = '8px';
-    closeBtn.style.width = '28px';
-    closeBtn.style.height = '28px';
-    closeBtn.style.borderRadius = '50%';
-    closeBtn.style.cursor = 'pointer';
     closeBtn.onclick = e => {
       e.stopPropagation();
       helpOpen = false;
@@ -559,13 +458,7 @@ function renderPhotoControls() {
     const closeIcon = document.createElement('img');
     closeIcon.src = 'icons/close.svg';
     closeIcon.alt = 'Close help';
-    closeIcon.style.position = 'absolute';
-    closeIcon.style.left = '50%';
-    closeIcon.style.top = '50%';
-    closeIcon.style.transform = 'translate(-50%, -50%)';
-    closeIcon.style.width = '18px';
-    closeIcon.style.height = '18px';
-    closeIcon.style.pointerEvents = 'none';
+    closeIcon.className = 'icon-btn__icon icon-btn__icon--sm';
 
     closeBtn.appendChild(closeIcon);
     modal.appendChild(closeBtn);
@@ -615,16 +508,11 @@ function renderCollagePage() {
     // as Add Page. It triggers the hidden file input.
     if (pageIndex === currentPage) {
       const addImageButton = document.createElement('div');
-      addImageButton.className = 'resize-handle image-resize-handle page-add-image-button';
+      addImageButton.className = 'resize-handle image-resize-handle icon-btn icon-btn--lg page-add-image-button';
       addImageButton.setAttribute('data-html2canvas-ignore', 'true');
-      addImageButton.style.position = 'absolute';
       // 40px button width + 32px gap => 72px offset
       addImageButton.style.left = '-72px';
       addImageButton.style.top = '0';
-      addImageButton.style.width = '40px';
-      addImageButton.style.height = '40px';
-      addImageButton.style.borderRadius = '50%';
-      addImageButton.style.cursor = 'pointer';
       addImageButton.onclick = e => {
         e.stopPropagation();
         const input = document.getElementById('photo-file-input');
@@ -636,13 +524,7 @@ function renderCollagePage() {
       const plusImg = document.createElement('img');
       plusImg.src = 'icons/image-plus.svg';
       plusImg.alt = 'Add image';
-      plusImg.style.position = 'absolute';
-      plusImg.style.left = '50%';
-      plusImg.style.top = '50%';
-      plusImg.style.transform = 'translate(-50%, -50%)';
-      plusImg.style.width = '20px';
-      plusImg.style.height = '20px';
-      plusImg.style.pointerEvents = 'none';
+      plusImg.className = 'icon-btn__icon icon-btn__icon--lg';
 
       addImageButton.appendChild(plusImg);
       // Counter-scale so button stays at original size; anchor
@@ -897,19 +779,14 @@ function renderCollagePage() {
       // Rotate button: styled div wrapper with centered icon,
       // inside the photo at the top-left corner.
       const rotateButton = document.createElement('div');
-      rotateButton.className = 'resize-handle image-resize-handle';
+      rotateButton.className = 'resize-handle image-resize-handle icon-btn icon-btn--md';
       // Do not include this control when capturing the
       // collage for PDF; external file:// images can
       // taint the canvas in some browsers.
       rotateButton.setAttribute('data-html2canvas-ignore', 'true');
-      rotateButton.style.position = 'absolute';
       // Inside the photo, top-left corner
       rotateButton.style.left = '4px';
       rotateButton.style.top = '4px';
-      rotateButton.style.width = '32px';
-      rotateButton.style.height = '32px';
-      rotateButton.style.borderRadius = '50%';
-      rotateButton.style.cursor = 'pointer';
       rotateButton.onclick = e => {
         e.stopPropagation();
         currentPage = pageIndex;
@@ -919,13 +796,7 @@ function renderCollagePage() {
       const rotateIcon = document.createElement('img');
       rotateIcon.src = 'icons/file-rotate-right.svg';
       rotateIcon.alt = 'Rotate';
-      rotateIcon.style.position = 'absolute';
-      rotateIcon.style.left = '50%';
-      rotateIcon.style.top = '50%';
-      rotateIcon.style.transform = 'translate(-50%, -50%)';
-      rotateIcon.style.width = '20px';
-      rotateIcon.style.height = '20px';
-      rotateIcon.style.pointerEvents = 'none';
+      rotateIcon.className = 'icon-btn__icon icon-btn__icon--md';
       rotateButton.appendChild(rotateIcon);
 
       // Counter-scale (inside top-left corner)
@@ -937,16 +808,11 @@ function renderCollagePage() {
       // inside the photo, to the right of the rotate button.
       const cropButton = document.createElement('div');
       // Extra class so we can visually indicate active crop mode.
-      cropButton.className = 'resize-handle image-resize-handle crop-toggle';
+      cropButton.className = 'resize-handle image-resize-handle icon-btn icon-btn--md crop-toggle';
       cropButton.setAttribute('data-html2canvas-ignore', 'true');
-      cropButton.style.position = 'absolute';
       // Inside the photo, next to rotate button
       cropButton.style.left = '44px';
       cropButton.style.top = '4px';
-      cropButton.style.width = '32px';
-      cropButton.style.height = '32px';
-      cropButton.style.borderRadius = '50%';
-      cropButton.style.cursor = 'pointer';
       cropButton.onclick = e => {
         e.stopPropagation();
         currentPage = pageIndex;
@@ -956,13 +822,7 @@ function renderCollagePage() {
       const cropIcon = document.createElement('img');
       cropIcon.src = 'icons/crop.svg';
       cropIcon.alt = 'Crop';
-      cropIcon.style.position = 'absolute';
-      cropIcon.style.left = '50%';
-      cropIcon.style.top = '50%';
-      cropIcon.style.transform = 'translate(-50%, -50%)';
-      cropIcon.style.width = '20px';
-      cropIcon.style.height = '20px';
-      cropIcon.style.pointerEvents = 'none';
+      cropIcon.className = 'icon-btn__icon icon-btn__icon--md';
       cropButton.appendChild(cropIcon);
 
       // Counter-scale (inside top, to the right of rotate)
@@ -980,17 +840,12 @@ function renderCollagePage() {
 
         ratioButtons.forEach(cfg => {
           const btn = document.createElement('div');
-          let classNames = 'resize-handle image-resize-handle crop-ratio-toggle';
+          let classNames = 'resize-handle image-resize-handle icon-btn icon-btn--md crop-ratio-toggle';
           if (cropAspectMode === cfg.mode) classNames += ' crop-ratio-active';
           btn.className = classNames;
           btn.setAttribute('data-html2canvas-ignore', 'true');
-          btn.style.position = 'absolute';
           btn.style.left = cfg.offset + 'px';
           btn.style.top = '4px';
-          btn.style.width = '32px';
-          btn.style.height = '32px';
-          btn.style.borderRadius = '50%';
-          btn.style.cursor = 'pointer';
 
           btn.onclick = e => {
             e.stopPropagation();
@@ -1016,13 +871,7 @@ function renderCollagePage() {
             : cfg.mode === '3:4'
             ? 'Crop 3:4 portrait'
             : 'Crop 1:1 square';
-          iconEl.style.position = 'absolute';
-          iconEl.style.left = '50%';
-          iconEl.style.top = '50%';
-          iconEl.style.transform = 'translate(-50%, -50%)';
-          iconEl.style.width = '20px';
-          iconEl.style.height = '20px';
-          iconEl.style.pointerEvents = 'none';
+          iconEl.className = 'icon-btn__icon icon-btn__icon--md';
           btn.appendChild(iconEl);
 
           // Counter-scale (inside top, along top edge)
@@ -1035,15 +884,10 @@ function renderCollagePage() {
       // Delete button: round control inside the photo
       // at the bottom-left corner.
       const deleteButton = document.createElement('div');
-      deleteButton.className = 'resize-handle image-resize-handle';
+      deleteButton.className = 'resize-handle image-resize-handle icon-btn icon-btn--md';
       deleteButton.setAttribute('data-html2canvas-ignore', 'true');
-      deleteButton.style.position = 'absolute';
       deleteButton.style.left = '4px';
       deleteButton.style.bottom = '4px';
-      deleteButton.style.width = '32px';
-      deleteButton.style.height = '32px';
-      deleteButton.style.borderRadius = '50%';
-      deleteButton.style.cursor = 'pointer';
       deleteButton.onclick = e => {
         e.stopPropagation();
         currentPage = pageIndex;
@@ -1053,13 +897,7 @@ function renderCollagePage() {
       const deleteIcon = document.createElement('img');
       deleteIcon.src = 'icons/delete-outline.svg';
       deleteIcon.alt = 'Delete photo';
-      deleteIcon.style.position = 'absolute';
-      deleteIcon.style.left = '50%';
-      deleteIcon.style.top = '50%';
-      deleteIcon.style.transform = 'translate(-50%, -50%)';
-      deleteIcon.style.width = '20px';
-      deleteIcon.style.height = '20px';
-      deleteIcon.style.pointerEvents = 'none';
+      deleteIcon.className = 'icon-btn__icon icon-btn__icon--md';
       deleteButton.appendChild(deleteIcon);
 
       // Counter-scale (inside bottom-left corner)
@@ -1171,15 +1009,10 @@ function renderCollagePage() {
 
     // Add Page button (centred)
     const addButton = document.createElement('div');
-    addButton.className = 'resize-handle image-resize-handle page-add-button';
-    addButton.style.position = 'absolute';
+    addButton.className = 'resize-handle image-resize-handle icon-btn icon-btn--lg page-add-button';
     addButton.style.left = '50%';
     addButton.style.top = '0';
     addButton.style.transform = 'translateX(-50%)';
-    addButton.style.width = '40px';
-    addButton.style.height = '40px';
-    addButton.style.borderRadius = '50%';
-    addButton.style.cursor = 'pointer';
     addButton.onclick = e => {
       e.stopPropagation();
       window.addPage();
@@ -1188,13 +1021,7 @@ function renderCollagePage() {
     const plusIcon = document.createElement('img');
     plusIcon.src = 'icons/plus.svg';
     plusIcon.alt = 'Add page';
-    plusIcon.style.position = 'absolute';
-    plusIcon.style.left = '50%';
-    plusIcon.style.top = '50%';
-    plusIcon.style.transform = 'translate(-50%, -50%)';
-    plusIcon.style.width = '20px';
-    plusIcon.style.height = '20px';
-    plusIcon.style.pointerEvents = 'none';
+    plusIcon.className = 'icon-btn__icon icon-btn__icon--lg';
 
     addButton.appendChild(plusIcon);
     actions.appendChild(addButton);
@@ -1203,14 +1030,9 @@ function renderCollagePage() {
     // one page exists.
     if (pages.length > 1) {
       const deletePageButton = document.createElement('div');
-      deletePageButton.className = 'resize-handle image-resize-handle page-delete-button';
-      deletePageButton.style.position = 'absolute';
+      deletePageButton.className = 'resize-handle image-resize-handle icon-btn icon-btn--lg page-delete-button';
       deletePageButton.style.left = '0';
       deletePageButton.style.top = '0';
-      deletePageButton.style.width = '40px';
-      deletePageButton.style.height = '40px';
-      deletePageButton.style.borderRadius = '50%';
-      deletePageButton.style.cursor = 'pointer';
       deletePageButton.onclick = e => {
         e.stopPropagation();
         window.removePage();
@@ -1219,13 +1041,7 @@ function renderCollagePage() {
       const deleteIcon = document.createElement('img');
       deleteIcon.src = 'icons/file-remove-outline.svg';
       deleteIcon.alt = 'Delete page';
-      deleteIcon.style.position = 'absolute';
-      deleteIcon.style.left = '50%';
-      deleteIcon.style.top = '50%';
-      deleteIcon.style.transform = 'translate(-50%, -50%)';
-      deleteIcon.style.width = '20px';
-      deleteIcon.style.height = '20px';
-      deleteIcon.style.pointerEvents = 'none';
+      deleteIcon.className = 'icon-btn__icon icon-btn__icon--lg';
 
       deletePageButton.appendChild(deleteIcon);
       actions.appendChild(deletePageButton);
