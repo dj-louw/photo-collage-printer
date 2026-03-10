@@ -1,7 +1,7 @@
 // Photo Collage Printer - app.js
 // Main entry point for the web-app
 
-const app = document.getElementById('app');
+const app = document.getElementById('collage-pages');
 
 // ─────────────────────────────────────────────────────────────
 // Constants
@@ -90,10 +90,6 @@ let cropAspectMode = null;
 let cropDragImage = false;
 let cropImageDragStart = null;
 let cropImageOrigOffset = null;
-
-// Settings UI state
-let settingsOpen = false;
-let helpOpen = false;
 
 // Responsive scaling: tracks the current scale factor applied
 // to collage pages so coordinate calculations can compensate.
@@ -248,269 +244,109 @@ function render() {
   const scrollY = window.pageYOffset || document.documentElement.scrollTop;
 
   app.innerHTML = '';
-  renderPageControls();
-  renderPhotoControls();
   renderCollagePage();
+  // Update settings UI to reflect current page size
+  updateSettingsUI();
 
   // Restore scroll position after DOM is rebuilt
   window.scrollTo(scrollX, scrollY);
 }
 
-function renderPageControls() {
-  const div = document.createElement('div');
-  div.className = 'page-controls';
-  // App heading and subheading: explain the main goal of
-  // filling each sheet to avoid wasting paper.
-  const title = document.createElement('div');
-  title.className = 'app-title';
-  title.textContent = 'Photo Collage Printer';
+// ============================================
+// Global Control Functions
+// ============================================
 
-  const subtitle = document.createElement('div');
-  subtitle.className = 'app-subtitle';
-  subtitle.textContent = 'Fill the page, save the paper';
-
-  const description = document.createElement('div');
-  description.className = 'app-description';
-  description.textContent = 'Add, move, crop, and size your happy snaps so every print uses the whole sheet.';
-
-  div.appendChild(title);
-  div.appendChild(subtitle);
-   div.appendChild(description);
-
-  // Page actions themselves are attached directly to each
-  // page below; this header is purely informational.
-  app.appendChild(div);
+// Toggle the settings flyout visibility
+function toggleSettings() {
+  const flyout = document.getElementById('settings-flyout');
+  flyout.classList.toggle('hidden');
 }
 
-function renderPhotoControls() {
-  const div = document.createElement('div');
-  div.className = 'photo-controls';
-  div.innerHTML = `
-    <input id="photo-file-input" type="file" accept="image/*" onchange="importPhoto(event)" style="display:none">
-  `;
-  app.appendChild(div);
+// Toggle the help modal visibility
+function toggleHelp(show) {
+  const overlay = document.getElementById('help-overlay');
+  if (show === undefined) {
+    overlay.classList.toggle('hidden');
+  } else {
+    overlay.classList.toggle('hidden', !show);
+  }
+}
 
-  // Global Print button: circular icon in the upper-right
-  // corner of the app container, with a small inset.
-  const printButton = document.createElement('div');
-  printButton.className = 'resize-handle image-resize-handle icon-btn icon-btn--lg app-print-button';
-  printButton.setAttribute('data-html2canvas-ignore', 'true');
-  // 8px breathing room to the top/right of the button
-  printButton.style.top = '8px';
-  printButton.style.right = '8px';
-  printButton.onclick = e => {
+// Update settings UI to reflect current page size
+function updateSettingsUI() {
+  const page = pages[currentPage];
+  const isLetter = page.size.width === PAGE_SIZE_LETTER.width && page.size.height === PAGE_SIZE_LETTER.height;
+  const currentSizeValue = isLetter ? 'Letter' : 'A4';
+
+  document.querySelectorAll('.settings-option').forEach(option => {
+    const isActive = option.dataset.size === currentSizeValue;
+    option.classList.toggle('active', isActive);
+    option.style.fontWeight = isActive ? 'bold' : '';
+    option.style.background = isActive ? '#e0f2ff' : '';
+  });
+}
+
+// Initialize global control event handlers (called once on load)
+function initGlobalControls() {
+  // Print button
+  document.getElementById('print-button').onclick = e => {
     e.stopPropagation();
     window.printCollage();
   };
 
-  const printIcon = document.createElement('img');
-  printIcon.src = 'icons/printer-outline.svg';
-  printIcon.alt = 'Print collage';
-  printIcon.className = 'icon-btn__icon icon-btn__icon--lg';
-
-  printButton.appendChild(printIcon);
-  app.appendChild(printButton);
-
-  // Settings button: cog icon below the print button.
-  const settingsButton = document.createElement('div');
-  settingsButton.className = 'resize-handle image-resize-handle icon-btn icon-btn--lg app-settings-button';
-  settingsButton.setAttribute('data-html2canvas-ignore', 'true');
-  // 8px from right, placed below the print button with
-  // an 8px vertical gap (8 + 40 + 8 = 56).
-  settingsButton.style.top = '56px';
-  settingsButton.style.right = '8px';
-  settingsButton.onclick = e => {
+  // Settings button
+  document.getElementById('settings-button').onclick = e => {
     e.stopPropagation();
-    settingsOpen = !settingsOpen;
-    render();
+    toggleSettings();
   };
 
-  const settingsIcon = document.createElement('img');
-  settingsIcon.src = 'icons/cog-outline.svg';
-  settingsIcon.alt = 'Settings';
-  settingsIcon.className = 'icon-btn__icon icon-btn__icon--lg';
-
-  settingsButton.appendChild(settingsIcon);
-  app.appendChild(settingsButton);
-
-  // GitHub button: link to the project repository,
-  // stacked below the settings button.
-  const githubButton = document.createElement('div');
-  githubButton.className = 'resize-handle image-resize-handle icon-btn icon-btn--lg app-github-button';
-  githubButton.setAttribute('data-html2canvas-ignore', 'true');
-  // 8px gap below the 40px-tall settings button
-  githubButton.style.top = '104px';
-  githubButton.style.right = '8px';
-  githubButton.onclick = e => {
+  // GitHub button
+  document.getElementById('github-button').onclick = e => {
     e.stopPropagation();
     window.open('https://github.com/dj-louw/photo-collage-printer', '_blank');
   };
 
-  const githubIcon = document.createElement('img');
-  githubIcon.src = 'icons/github.svg';
-  githubIcon.alt = 'Open GitHub repository';
-  githubIcon.className = 'icon-btn__icon icon-btn__icon--lg';
-
-  githubButton.appendChild(githubIcon);
-  app.appendChild(githubButton);
-
-  // Help button: stacked below the GitHub button.
-  const helpButton = document.createElement('div');
-  helpButton.className = 'resize-handle image-resize-handle icon-btn icon-btn--lg app-help-button';
-  helpButton.setAttribute('data-html2canvas-ignore', 'true');
-  // 8px gap below the 40px-tall GitHub button
-  helpButton.style.top = '152px';
-  helpButton.style.right = '8px';
-  helpButton.onclick = e => {
+  // Help button
+  document.getElementById('help-button').onclick = e => {
     e.stopPropagation();
-    helpOpen = true;
-    render();
+    toggleHelp(true);
   };
 
-  const helpIcon = document.createElement('img');
-  helpIcon.src = 'icons/help.svg';
-  helpIcon.alt = 'Help';
-  helpIcon.className = 'icon-btn__icon icon-btn__icon--lg';
+  // Help close button
+  document.getElementById('help-close-button').onclick = e => {
+    e.stopPropagation();
+    toggleHelp(false);
+  };
 
-  helpButton.appendChild(helpIcon);
-  app.appendChild(helpButton);
+  // Help overlay background click to close
+  document.getElementById('help-overlay').onclick = e => {
+    if (e.target === e.currentTarget) {
+      toggleHelp(false);
+    }
+  };
 
-  // Settings fly-out menu: currently only page size.
-  if (settingsOpen) {
-    const page = pages[currentPage];
-    const isLetter = page.size.width === 216 && page.size.height === 279;
-    const currentSizeValue = isLetter ? 'Letter' : 'A4';
-
-    const flyout = document.createElement('div');
-    flyout.className = 'flyout settings-flyout';
-    // Align the flyout with the top of the settings
-    // button and place it to the left of the button
-    // column, inside the app container.
-    flyout.style.top = '56px';
-    flyout.style.right = '56px';
-
-    const sectionTitle = document.createElement('div');
-    sectionTitle.className = 'flyout__title settings-section-title';
-    sectionTitle.textContent = 'Page size';
-    flyout.appendChild(sectionTitle);
-
-    const sizes = [
-      { value: 'A4', label: 'A4' },
-      { value: 'Letter', label: 'Letter' }
-    ];
-
-    sizes.forEach(size => {
-      const row = document.createElement('div');
-      row.className = 'flyout__row settings-option' + (currentSizeValue === size.value ? ' active' : '');
-      if (currentSizeValue === size.value) {
-        row.style.fontWeight = 'bold';
-        row.style.background = '#e0f2ff';
-      }
-      row.onclick = e => {
-        e.stopPropagation();
-        window.changePageSize(size.value);
-        settingsOpen = false;
-      };
-      row.textContent = size.label;
-      flyout.appendChild(row);
-    });
-
-    app.appendChild(flyout);
-  }
-
-  // Help modal overlay
-  if (helpOpen) {
-    const overlay = document.createElement('div');
-    overlay.className = 'modal-overlay help-overlay';
-    overlay.setAttribute('data-html2canvas-ignore', 'true');
-    overlay.onclick = () => {
-      helpOpen = false;
-      render();
-    };
-
-    const modal = document.createElement('div');
-    modal.className = 'modal help-modal';
-    modal.onclick = e => e.stopPropagation();
-
-    const title = document.createElement('div');
-    title.className = 'modal__title';
-    title.textContent = 'How to use Photo Collage Printer';
-    modal.appendChild(title);
-
-    const sections = document.createElement('div');
-    sections.className = 'modal__content';
-
-    const mkRow = (iconSrc, alt, text) => {
-      const row = document.createElement('div');
-      row.className = 'modal__row';
-
-      const btn = document.createElement('div');
-      btn.className = 'resize-handle image-resize-handle icon-btn--sm modal__row-icon';
-
-      const ic = document.createElement('img');
-      ic.src = iconSrc;
-      ic.alt = alt;
-      ic.className = 'icon-btn__icon icon-btn__icon--sm';
-
-      btn.appendChild(ic);
-
-      const span = document.createElement('span');
-      span.textContent = text;
-
-      row.appendChild(btn);
-      row.appendChild(span);
-      return row;
-    };
-
-    // Top-level actions
-    sections.appendChild(mkRow('icons/image-plus.svg', 'Add image', 'Add a new image to the active page.'));
-    sections.appendChild(mkRow('icons/plus.svg', 'Add page', 'Add a new blank page below the current one.'));
-    sections.appendChild(mkRow('icons/file-remove-outline.svg', 'Delete', 'Delete the active page.'));
-    sections.appendChild(mkRow('icons/delete-outline.svg', 'Delete', 'Delete the selected photo.'));
-
-    const sep1 = document.createElement('div');
-    sep1.className = 'modal__separator';
-    modal.appendChild(sep1);
-
-    sections.appendChild(mkRow('icons/file-rotate-right.svg', 'Rotate photo', 'Rotate the selected photo 90° clockwise.'));
-    sections.appendChild(mkRow('icons/crop.svg', 'Crop mode', 'Toggle crop mode to adjust the visible part of a photo.'));
-    sections.appendChild(mkRow('icons/arrow-top-left-bottom-right.svg', 'Resize / zoom', 'Drag resize handles to resize photos or zoom while cropping.'));
-
-    const sep2 = document.createElement('div');
-    sep2.className = 'modal__separator';
-    modal.appendChild(sep2);
-
-    sections.appendChild(mkRow('icons/cog-outline.svg', 'Page size', 'Open settings to switch between A4 and Letter.'));
-    sections.appendChild(mkRow('icons/printer-outline.svg', 'Print / PDF', 'Export all pages to a printable PDF.'));
-    sections.appendChild(mkRow('icons/github.svg', 'GitHub', 'Open the project on GitHub.'));
-
-    modal.appendChild(sections);
-
-    // Icon-style close button in the top-right corner,
-    // using the same round button style as other controls.
-    const closeBtn = document.createElement('div');
-    closeBtn.className = 'resize-handle image-resize-handle icon-btn icon-btn--sm help-close-button';
-    closeBtn.style.top = '8px';
-    closeBtn.style.right = '8px';
-    closeBtn.onclick = e => {
+  // Settings flyout options
+  document.querySelectorAll('.settings-option').forEach(option => {
+    option.onclick = e => {
       e.stopPropagation();
-      helpOpen = false;
-      render();
+      window.changePageSize(option.dataset.size);
+      toggleSettings();
     };
+  });
 
-    const closeIcon = document.createElement('img');
-    closeIcon.src = 'icons/close.svg';
-    closeIcon.alt = 'Close help';
-    closeIcon.className = 'icon-btn__icon icon-btn__icon--sm';
+  // Close settings flyout when clicking elsewhere
+  document.addEventListener('click', e => {
+    const flyout = document.getElementById('settings-flyout');
+    const settingsBtn = document.getElementById('settings-button');
+    if (!flyout.classList.contains('hidden') &&
+        !flyout.contains(e.target) &&
+        !settingsBtn.contains(e.target)) {
+      flyout.classList.add('hidden');
+    }
+  });
 
-    closeBtn.appendChild(closeIcon);
-    modal.appendChild(closeBtn);
-
-    overlay.appendChild(modal);
-    // Attach to the app container so the overlay is
-    // cleared automatically on each render.
-    app.appendChild(overlay);
-  }
+  // Wire up hidden file input onchange
+  document.getElementById('photo-file-input').onchange = e => importPhoto(e);
 }
 
 // ============================================
@@ -2010,6 +1846,9 @@ window.addEventListener('resize', function() {
     render();
   }, 100);
 });
+
+// Initialize global controls (static UI elements in HTML)
+initGlobalControls();
 
 // Initial render with sample photos on the first page
 loadInitialSamplePhotos();

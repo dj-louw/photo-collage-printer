@@ -85,11 +85,19 @@ Replaced all occurrences throughout the codebase.
 **Reason:** Users could accidentally lose their collage layout.  
 **Fix:** Add localStorage save/restore or warn before unload.
 
-### 8. Misleading function name
+### 8. [FIXED] Misleading function name
 **Location:** [app.js](../app.js#L236) `renderPhotoControls()`  
 **Issue:** Function renders print button, settings, GitHub link, help modal—not just "photo controls".  
 **Reason:** Name doesn't match responsibility.  
 **Fix:** Rename to `renderGlobalControls()` or split into separate functions.
+
+**Resolution:** Rather than just renaming, moved all static UI elements to index.html:
+- App header (title, subtitle, description) now in HTML
+- Global control buttons (print, settings, GitHub, help) now in `#global-controls`
+- Settings flyout now in `#settings-flyout` with `.hidden` toggle class
+- Help modal now in `#help-overlay` with `.hidden` toggle class
+Eliminated `renderPageControls()` and `renderPhotoControls()` entirely (~230 lines removed).
+Added new functions: `initGlobalControls()`, `toggleSettings()`, `toggleHelp()`, `updateSettingsUI()`.
 
 ---
 

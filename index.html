@@ -7,7 +7,119 @@
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <div id="app"></div>
+  <!-- Hidden file input for photo import -->
+  <input id="photo-file-input" type="file" accept="image/*" style="display:none">
+
+  <!-- Main app container -->
+  <div id="app">
+    <!-- App header -->
+    <div class="page-controls">
+      <div class="app-title">Photo Collage Printer</div>
+      <div class="app-subtitle">Fill the page, save the paper</div>
+      <div class="app-description">Add, move, crop, and size your happy snaps so every print uses the whole sheet.</div>
+    </div>
+
+    <!-- Global control buttons (top-right corner of app) -->
+    <div id="global-controls" data-html2canvas-ignore="true">
+      <div id="print-button" class="resize-handle image-resize-handle icon-btn icon-btn--lg app-print-button">
+        <img src="icons/printer-outline.svg" alt="Print collage" class="icon-btn__icon icon-btn__icon--lg">
+      </div>
+      <div id="settings-button" class="resize-handle image-resize-handle icon-btn icon-btn--lg app-settings-button">
+        <img src="icons/cog-outline.svg" alt="Settings" class="icon-btn__icon icon-btn__icon--lg">
+      </div>
+      <div id="github-button" class="resize-handle image-resize-handle icon-btn icon-btn--lg app-github-button">
+        <img src="icons/github.svg" alt="Open GitHub repository" class="icon-btn__icon icon-btn__icon--lg">
+      </div>
+      <div id="help-button" class="resize-handle image-resize-handle icon-btn icon-btn--lg app-help-button">
+        <img src="icons/help.svg" alt="Help" class="icon-btn__icon icon-btn__icon--lg">
+      </div>
+    </div>
+
+    <!-- Settings flyout -->
+    <div id="settings-flyout" class="flyout settings-flyout hidden">
+    <div class="flyout__title settings-section-title">Page size</div>
+      <div id="size-option-a4" class="flyout__row settings-option" data-size="A4">A4</div>
+      <div id="size-option-letter" class="flyout__row settings-option" data-size="Letter">Letter</div>
+    </div>
+
+    <!-- Collage pages container (dynamically rendered) -->
+    <div id="collage-pages"></div>
+  </div>
+
+  <!-- Help modal -->
+  <div id="help-overlay" class="modal-overlay help-overlay hidden" data-html2canvas-ignore="true">
+    <div class="modal help-modal">
+      <div class="modal__title">How to use Photo Collage Printer</div>
+      <div class="modal__content">
+        <div class="modal__row">
+          <div class="resize-handle image-resize-handle icon-btn--sm modal__row-icon">
+            <img src="icons/image-plus.svg" alt="Add image" class="icon-btn__icon icon-btn__icon--sm">
+          </div>
+          <span>Add a new image to the active page.</span>
+        </div>
+        <div class="modal__row">
+          <div class="resize-handle image-resize-handle icon-btn--sm modal__row-icon">
+            <img src="icons/plus.svg" alt="Add page" class="icon-btn__icon icon-btn__icon--sm">
+          </div>
+          <span>Add a new blank page below the current one.</span>
+        </div>
+        <div class="modal__row">
+          <div class="resize-handle image-resize-handle icon-btn--sm modal__row-icon">
+            <img src="icons/file-remove-outline.svg" alt="Delete page" class="icon-btn__icon icon-btn__icon--sm">
+          </div>
+          <span>Delete the active page.</span>
+        </div>
+        <div class="modal__row">
+          <div class="resize-handle image-resize-handle icon-btn--sm modal__row-icon">
+            <img src="icons/delete-outline.svg" alt="Delete photo" class="icon-btn__icon icon-btn__icon--sm">
+          </div>
+          <span>Delete the selected photo.</span>
+        </div>
+        <div class="modal__separator"></div>
+        <div class="modal__row">
+          <div class="resize-handle image-resize-handle icon-btn--sm modal__row-icon">
+            <img src="icons/file-rotate-right.svg" alt="Rotate photo" class="icon-btn__icon icon-btn__icon--sm">
+          </div>
+          <span>Rotate the selected photo 90° clockwise.</span>
+        </div>
+        <div class="modal__row">
+          <div class="resize-handle image-resize-handle icon-btn--sm modal__row-icon">
+            <img src="icons/crop.svg" alt="Crop mode" class="icon-btn__icon icon-btn__icon--sm">
+          </div>
+          <span>Toggle crop mode to adjust the visible part of a photo.</span>
+        </div>
+        <div class="modal__row">
+          <div class="resize-handle image-resize-handle icon-btn--sm modal__row-icon">
+            <img src="icons/arrow-top-left-bottom-right.svg" alt="Resize / zoom" class="icon-btn__icon icon-btn__icon--sm">
+          </div>
+          <span>Drag resize handles to resize photos or zoom while cropping.</span>
+        </div>
+        <div class="modal__separator"></div>
+        <div class="modal__row">
+          <div class="resize-handle image-resize-handle icon-btn--sm modal__row-icon">
+            <img src="icons/cog-outline.svg" alt="Page size" class="icon-btn__icon icon-btn__icon--sm">
+          </div>
+          <span>Open settings to switch between A4 and Letter.</span>
+        </div>
+        <div class="modal__row">
+          <div class="resize-handle image-resize-handle icon-btn--sm modal__row-icon">
+            <img src="icons/printer-outline.svg" alt="Print / PDF" class="icon-btn__icon icon-btn__icon--sm">
+          </div>
+          <span>Export all pages to a printable PDF.</span>
+        </div>
+        <div class="modal__row">
+          <div class="resize-handle image-resize-handle icon-btn--sm modal__row-icon">
+            <img src="icons/github.svg" alt="GitHub" class="icon-btn__icon icon-btn__icon--sm">
+          </div>
+          <span>Open the project on GitHub.</span>
+        </div>
+      </div>
+      <div id="help-close-button" class="resize-handle image-resize-handle icon-btn icon-btn--sm help-close-button">
+        <img src="icons/close.svg" alt="Close help" class="icon-btn__icon icon-btn__icon--sm">
+      </div>
+    </div>
+  </div>
+
   <footer style="text-align:center; margin-top:12px; font-size:12px; color:#666;">
     Photo Collage Printer – Version 1.0.0
   </footer>
