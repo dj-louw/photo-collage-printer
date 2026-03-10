@@ -25,6 +25,10 @@ let resizePhotoIdx = null;
 let resizeOrig = null;
 let activeHandleElement = null;
 
+// Pointer capture state for reliable touch/pen tracking
+let activePointerId = null;
+let capturedElement = null;
+
 // Crop state
 let cropMode = false;        // whether crop mode is active
 let cropPhotoIdx = null;     // which photo is in crop mode
@@ -647,6 +651,12 @@ function renderCollagePage() {
       selectPhoto(pageIndex, idx);
     };
 
+    // Unified pointer events: work for mouse, touch, and pen.
+    // pointerdown starts drag/crop; click handles selection.
+    img.onpointerdown = e => {
+      handlePointerDownOnImage(e.pageX, e.pageY, img, e);
+    };
+
     mask.appendChild(img);
     container.appendChild(mask);
 
@@ -701,22 +711,9 @@ function renderCollagePage() {
           startResize(evt, idx, pos.name);
         };
 
-        handle.onmousedown = e => {
+        // Unified pointer event for mouse, touch, and pen
+        handle.onpointerdown = e => {
           startBoxResize(e);
-        };
-
-        handle.ontouchstart = e => {
-          if (!e.touches || e.touches.length === 0) return;
-          const t = e.touches[0];
-          const syntheticEvent = {
-            pageX: t.pageX,
-            pageY: t.pageY,
-            currentTarget: e.currentTarget,
-            target: e.target,
-            stopPropagation: () => e.stopPropagation(),
-            preventDefault: () => e.preventDefault()
-          };
-          startBoxResize(syntheticEvent);
         };
 
         // For the non-crop resize handle, embed the same
@@ -810,22 +807,9 @@ function renderCollagePage() {
           startImageResize(evt, idx, 'se');
         };
 
-        imgHandle.onmousedown = e => {
+        // Unified pointer event for mouse, touch, and pen
+        imgHandle.onpointerdown = e => {
           startImageBoxResize(e);
-        };
-
-        imgHandle.ontouchstart = e => {
-          if (!e.touches || e.touches.length === 0) return;
-          const t = e.touches[0];
-          const syntheticEvent = {
-            pageX: t.pageX,
-            pageY: t.pageY,
-            currentTarget: e.currentTarget,
-            target: e.target,
-            stopPropagation: () => e.stopPropagation(),
-            preventDefault: () => e.preventDefault()
-          };
-          startImageBoxResize(syntheticEvent);
         };
 
         // Center the custom resize icon inside the handle.
@@ -1540,6 +1524,16 @@ function startResize(e, idx, handle) {
   if (activeHandleElement) {
     activeHandleElement.classList.add('handle-active');
   }
+  // Capture the pointer for reliable tracking during resize
+  if (e.pointerId !== undefined && activeHandleElement && activeHandleElement.setPointerCapture) {
+    try {
+      activeHandleElement.setPointerCapture(e.pointerId);
+      activePointerId = e.pointerId;
+      capturedElement = activeHandleElement;
+    } catch (err) {
+      // Pointer capture may fail in some edge cases; ignore.
+    }
+  }
   resizing = true;
   resizePhotoIdx = idx;
   resizeStart = { x: e.pageX, y: e.pageY };
@@ -1570,6 +1564,16 @@ function startImageResize(e, idx, handle) {
   if (activeHandleElement) {
     activeHandleElement.classList.add('handle-active');
   }
+  // Capture the pointer for reliable tracking during resize
+  if (e.pointerId !== undefined && activeHandleElement && activeHandleElement.setPointerCapture) {
+    try {
+      activeHandleElement.setPointerCapture(e.pointerId);
+      activePointerId = e.pointerId;
+      capturedElement = activeHandleElement;
+    } catch (err) {
+      // Pointer capture may fail in some edge cases; ignore.
+    }
+  }
   resizing = true;
   resizePhotoIdx = idx;
   resizeStart = { x: e.pageX, y: e.pageY };
@@ -1591,11 +1595,18 @@ function startImageResize(e, idx, handle) {
 
 // Global pointer handlers for drag + resize
 function handlePointerDownOnImage(pageX, pageY, target, originalEvent) {
-  // Only start drag if interacting directly with an image
-  // (not handles/icons).
-  if (!(target.classList && target.classList.contains('photo'))) return;
+  // Ignore obvious controls such as resize handles and
+  // circular icon buttons – they manage their own
+  // interactions.
+  if (target.closest && target.closest('.resize-handle')) {
+    return;
+  }
 
-  const container = target.closest('[data-photo-index]');
+  // Start drag when interacting anywhere inside a photo
+  // container (image or its mask/overlay), so drags
+  // initiated within the active page are consistently
+  // recognised.
+  const container = target.closest && target.closest('[data-photo-index]');
   if (!container) return;
   const pageIndex = container.dataset.pageIndex ? Number(container.dataset.pageIndex) : 0;
   const idx = Number(container.dataset.photoIndex);
@@ -1623,20 +1634,26 @@ function handlePointerDownOnImage(pageX, pageY, target, originalEvent) {
       y: pageY - app.offsetTop - photo.y
     };
   }
+  // Capture the pointer so we continue receiving events even
+  // if the finger/pen moves outside the target element.
+  if (originalEvent && originalEvent.pointerId !== undefined && target.setPointerCapture) {
+    try {
+      target.setPointerCapture(originalEvent.pointerId);
+      activePointerId = originalEvent.pointerId;
+      capturedElement = target;
+    } catch (err) {
+      // Pointer capture may fail in some edge cases; ignore.
+    }
+  }
   if (originalEvent && originalEvent.preventDefault) {
     originalEvent.preventDefault();
   }
 }
 
-document.addEventListener('mousedown', function(e) {
+// Use pointerdown instead of separate mousedown/touchstart
+document.addEventListener('pointerdown', function(e) {
   handlePointerDownOnImage(e.pageX, e.pageY, e.target, e);
 });
-
-document.addEventListener('touchstart', function(e) {
-  if (!e.touches || e.touches.length === 0) return;
-  const t = e.touches[0];
-  handlePointerDownOnImage(t.pageX, t.pageY, e.target, e);
-}, { passive: false });
 
 function handlePointerMove(pageX, pageY) {
   const pageWidth = pages[currentPage].size.width * 3;
@@ -1998,24 +2015,26 @@ function handlePointerMove(pageX, pageY) {
   }
 }
 
-document.addEventListener('mousemove', function(e) {
+// Use pointermove instead of separate mousemove/touchmove
+document.addEventListener('pointermove', function(e) {
   handlePointerMove(e.pageX, e.pageY);
 });
-
-document.addEventListener('touchmove', function(e) {
-  if (!(dragging || resizing || (cropMode && cropDragImage))) return;
-  if (!e.touches || e.touches.length === 0) return;
-  const t = e.touches[0];
-  handlePointerMove(t.pageX, t.pageY);
-  // Prevent the page from scrolling while dragging/resizing
-  // inside the collage area.
-  e.preventDefault();
-}, { passive: false });
 
 function handlePointerUp() {
   // Capture whether a drag/resize was actually active so we
   // only force a re-render when something was being adjusted.
   const hadInteraction = resizing || dragging || cropDragImage;
+
+  // Release any captured pointer before resetting state
+  if (activePointerId !== null && capturedElement && capturedElement.releasePointerCapture) {
+    try {
+      capturedElement.releasePointerCapture(activePointerId);
+    } catch (err) {
+      // Ignore if capture was already released.
+    }
+  }
+  activePointerId = null;
+  capturedElement = null;
 
   resizing = false;
   resizePhotoIdx = null;
@@ -2042,9 +2061,9 @@ function handlePointerUp() {
   }
 }
 
-document.addEventListener('mouseup', handlePointerUp);
-document.addEventListener('touchend', handlePointerUp);
-document.addEventListener('touchcancel', handlePointerUp);
+// Use pointerup and pointercancel instead of separate mouse/touch events
+document.addEventListener('pointerup', handlePointerUp);
+document.addEventListener('pointercancel', handlePointerUp);
 
 // Initial render with sample photos on the first page
 loadInitialSamplePhotos();

@@ -54,6 +54,9 @@ body {
   /* Stack pages vertically and centre them in the
      workspace, with some breathing room between. */
   margin: 0 auto 24px auto;
+  /* Prevent browser touch gestures (pan, zoom) so pointer
+     events work reliably for drag/resize on touch devices. */
+  touch-action: none;
 }
 
 /* Highlight the active page with the same blue outline
@@ -67,6 +70,8 @@ body {
 /* The actual <img> elements; the container carries the border/frame. */
 .photo {
   cursor: move;
+  /* Prevent browser touch gestures on photos */
+  touch-action: none;
 }
 
 /* Unrotated photo container; only selected ones get a blue frame. */
@@ -102,6 +107,8 @@ body {
   box-shadow: 0 1px 4px rgba(0,0,0,0.15);
   z-index: 10;
   pointer-events: auto;
+  /* Prevent browser touch gestures on handles */
+  touch-action: none;
 }
 
 /* Visual frame for the full underlying image while cropping. */
