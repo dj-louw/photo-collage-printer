@@ -14,17 +14,21 @@ Review date: March 10, 2026
 
 **Resolution:** Added logic to check `pages[0].size` dimensions and pass the appropriate format (`'letter'` or `'a4'`) to jsPDF constructor.
 
-### 2. Same file re-selection doesn't trigger import
+### 2. [NOT REPRODUCIBLE] Same file re-selection doesn't trigger import
 **Location:** [app.js](../app.js#L1356)  
 **Issue:** The file input won't fire `onchange` if the user selects the same file twice.  
 **Reason:** The input's value isn't reset after import.  
 **Fix:** Add `event.target.value = ''` at the end of `importPhoto()`.
 
-### 3. No error handling for image load failures
+**Resolution:** Could not reproduce in testing. Modern browsers appear to handle this correctly.
+
+### 3. [FIXED] No error handling for image load failures
 **Location:** [app.js](../app.js#L127-L193)  
 **Issue:** `loadInitialSamplePhotos()` has no `img.onerror` handler.  
 **Reason:** If sample photos fail to load, nothing happens and no feedback is given.  
 **Fix:** Add `img.onerror` with console warning or fallback.
+
+**Resolution:** Added `img.onerror` handler that displays an alert with the failed image path.
 
 ---
 

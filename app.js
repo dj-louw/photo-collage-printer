@@ -191,6 +191,9 @@ function loadInitialSamplePhotos() {
         render();
       }
     };
+    img.onerror = function() {
+      alert('Failed to load image: ' + config.src);
+    };
     img.src = config.src;
   });
 }
