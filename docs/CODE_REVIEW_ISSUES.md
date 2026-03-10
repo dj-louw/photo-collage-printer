@@ -120,11 +120,13 @@ Added new functions: `initGlobalControls()`, `toggleSettings()`, `toggleHelp()`,
 
 Benefits: Logical grouping, easier debugging (`console.log(state)`), clear serialization path for persistence (`JSON.stringify(state.document)`), and safer state management.
 
-### 10. Inconsistent indentation
+### 10. [FIXED] Inconsistent indentation
 **Location:** [app.js](../app.js#L230) `   div.appendChild(description);`  
 **Issue:** Extra leading space on this line.  
 **Reason:** Code style inconsistency.  
 **Fix:** Remove extra space.
+
+**Resolution:** The offending line was part of `renderPageControls()`, which was removed entirely in Issue #8 when static UI elements were moved to HTML.
 
 ### 11. Duplicated button creation pattern
 **Location:** Throughout render functions  
