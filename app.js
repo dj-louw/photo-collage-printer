@@ -45,66 +45,109 @@ let cropImageOrigOffset = null;
 let settingsOpen = false;
 let helpOpen = false;
 
-// Load three sample photos onto the first page when the
-// app starts, so new users see an example layout.
+// Declarative layout for the built-in sample photos. Edit
+// xMm / yMm / widthMm / heightMm / rotationTurns here to
+// change their initial position, size and rotation.
+const SAMPLE_PHOTO_LAYOUT = [
+  {
+    id: 'family-photo-1',
+    src: 'sample-photos/family-photo-1.jpg',
+    xMm: 15,
+    yMm: 15,
+    widthMm: 95,
+    heightMm: 95,
+    rotationTurns: 0
+  },
+  {
+    id: 'family-photo-2',
+    src: 'sample-photos/family-photo-2.jpg',
+    xMm: 9,
+    yMm: 25,
+    widthMm: 95,
+    heightMm: 95,
+    rotationTurns: 1
+  },
+  {
+    id: 'family-photo-3',
+    src: 'sample-photos/family-photo-3.jpg',
+    xMm: 45,
+    yMm: 120,
+    widthMm: 95,
+    heightMm: 95,
+    rotationTurns: 0
+  }
+];
+
+// Load the declarative sample layout onto the first page
+// when the app starts, so new users see an example.
 function loadInitialSamplePhotos() {
   const page = pages[0];
   if (!page || page.photos.length > 0) return;
 
-  const sources = [
-    'sample-photos/family-photo-1.jpg',
-    'sample-photos/family-photo-2.jpg',
-    'sample-photos/family-photo-3.jpg'
-  ];
+  const pxPerMm = 3;
 
-  const pageWidthPx = page.size.width * 3;
-  const targetWidth = pageWidthPx * 0.45; // ~45% of page width
-  const margin = 20;
-
-  sources.forEach((src, index) => {
+  SAMPLE_PHOTO_LAYOUT.forEach(config => {
     const img = new Image();
     img.onload = function() {
-      const scale = targetWidth / img.naturalWidth;
-      const width = targetWidth;
-      const height = img.naturalHeight * scale;
+      const naturalW = img.naturalWidth || img.width || 1;
+      const naturalH = img.naturalHeight || img.height || 1;
 
-      // Simple 2-column layout: two photos on the top row,
-      // one centred below.
-      let x;
-      let y;
-      if (index === 0) {
-        x = margin;
-        y = margin;
-      } else if (index === 1) {
-        x = pageWidthPx - margin - width;
-        y = margin;
+      let widthPx;
+      let heightPx;
+      if (config.widthMm) {
+        widthPx = config.widthMm * pxPerMm;
+        heightPx = widthPx * (naturalH / naturalW);
+      } else if (config.heightMm) {
+        heightPx = config.heightMm * pxPerMm;
+        widthPx = heightPx * (naturalW / naturalH);
       } else {
-        x = (pageWidthPx - width) / 2;
-        y = margin + height + margin;
+        // Fallback: use 45% of page width.
+        const pageWidthPx = page.size.width * pxPerMm;
+        widthPx = pageWidthPx * 0.45;
+        const scale = widthPx / naturalW;
+        heightPx = naturalH * scale;
       }
 
-      page.photos.push({
-        src,
-        x,
-        y,
-        width,
-        height,
+      const xPx = (config.xMm != null ? config.xMm * pxPerMm : 10);
+      const yPx = (config.yMm != null ? config.yMm * pxPerMm : 10);
+
+      const photo = {
+        src: config.src,
+        x: xPx,
+        y: yPx,
+        width: widthPx,
+        height: heightPx,
         rotation: 0,
-        imageWidth: width,
-        imageHeight: height,
+        imageWidth: widthPx,
+        imageHeight: heightPx,
         imageOffsetX: 0,
         imageOffsetY: 0
-      });
+      };
 
-      // Make family-photo-1 selected by default once it
-      // has loaded and been added to the page.
-      if (src.indexOf('family-photo-1') !== -1) {
+      page.photos.push(photo);
+
+      // Make family-photo-1 selected by default.
+      if (config.id === 'family-photo-1') {
         selectedPhoto = page.photos.length - 1;
       }
 
-      render();
+      // Apply any initial quarter-turn rotations declared
+      // in the layout. This uses the existing rotatePhoto
+      // helper (subject to the same file:// security rules).
+      const turns = config.rotationTurns || 0;
+      if (turns > 0) {
+        const originalPage = currentPage;
+        currentPage = 0;
+        const photoIndex = page.photos.length - 1;
+        for (let i = 0; i < turns; i++) {
+          rotatePhoto(photoIndex);
+        }
+        currentPage = originalPage;
+      } else {
+        render();
+      }
     };
-    img.src = src;
+    img.src = config.src;
   });
 }
 
