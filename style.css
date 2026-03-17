@@ -240,6 +240,15 @@ body {
 }
 
 /* ============================================
+   Crop Mask Overlay Strips
+   ============================================ */
+
+.crop-mask-strip {
+  position: absolute;
+  pointer-events: none;
+}
+
+/* ============================================
    Page Actions (Add/Delete page buttons below page)
    ============================================ */
 

@@ -46,6 +46,21 @@ const CROP_PRESET_3_4_HEIGHT_MM = 150;
 // suitable for high-quality photo printing.
 const PDF_EXPORT_SCALE = 4;
 
+// Crop mask definitions. Each mask specifies insets (in mm)
+// that define opaque border strips overlaid on the image.
+const CROP_MASKS = {
+  'border-3mm': {
+    label: 'Simple border (3 mm)',
+    top: 3, right: 3, bottom: 3, left: 3,
+    color: '#ffffff'
+  },
+  'polaroid': {
+    label: 'Polaroid',
+    top: 3, right: 3, bottom: 15, left: 3,
+    color: '#ffffff'
+  }
+};
+
 // ─────────────────────────────────────────────────────────────
 // State
 // ─────────────────────────────────────────────────────────────
@@ -287,7 +302,8 @@ function loadInitialSamplePhotos() {
         imageWidth: widthPx,
         imageHeight: heightPx,
         imageOffsetX: 0,
-        imageOffsetY: 0
+        imageOffsetY: 0,
+        cropMask: null
       };
 
       page.photos.push(photo);
@@ -457,7 +473,109 @@ function createPhotoMask(photo, pageIndex, idx) {
   };
 
   mask.appendChild(img);
+
+  // Overlay crop mask border strips if a mask is active
+  if (photo.cropMask && CROP_MASKS[photo.cropMask]) {
+    const m = CROP_MASKS[photo.cropMask];
+    const topPx = m.top * PX_PER_MM;
+    const rightPx = m.right * PX_PER_MM;
+    const bottomPx = m.bottom * PX_PER_MM;
+    const leftPx = m.left * PX_PER_MM;
+    const strips = [
+      { top: '0', left: '0', width: '100%', height: topPx + 'px' },
+      { bottom: '0', left: '0', width: '100%', height: bottomPx + 'px' },
+      { top: topPx + 'px', left: '0', width: leftPx + 'px', bottom: bottomPx + 'px' },
+      { top: topPx + 'px', right: '0', width: rightPx + 'px', bottom: bottomPx + 'px' }
+    ];
+    strips.forEach(s => {
+      const strip = document.createElement('div');
+      strip.className = 'crop-mask-strip';
+      strip.style.position = 'absolute';
+      strip.style.background = m.color;
+      strip.style.zIndex = '1';
+      strip.style.pointerEvents = 'none';
+      Object.keys(s).forEach(k => { strip.style[k] = s[k]; });
+      mask.appendChild(strip);
+    });
+  }
+
   return mask;
+}
+
+// Return the minimum photo box size accounting for crop mask insets.
+function getMinPhotoSize(photo) {
+  if (photo.cropMask && CROP_MASKS[photo.cropMask]) {
+    const m = CROP_MASKS[photo.cropMask];
+    return {
+      width: (m.left + m.right) * PX_PER_MM + MIN_PHOTO_SIZE_PX,
+      height: (m.top + m.bottom) * PX_PER_MM + MIN_PHOTO_SIZE_PX
+    };
+  }
+  return { width: MIN_PHOTO_SIZE_PX, height: MIN_PHOTO_SIZE_PX };
+}
+
+// Show the crop mask selection modal for the given photo.
+function showCropMaskModal(pageIndex, photoIdx) {
+  const page = state.document.pages[pageIndex];
+  if (!page) return;
+  const photo = page.photos[photoIdx];
+  if (!photo) return;
+
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay crop-mask-overlay';
+  overlay.onclick = e => { if (e.target === overlay) overlay.remove(); };
+
+  const modal = document.createElement('div');
+  modal.className = 'modal';
+
+  const title = document.createElement('div');
+  title.className = 'modal__title';
+  title.textContent = 'Crop Mask';
+  modal.appendChild(title);
+
+  const content = document.createElement('div');
+  content.className = 'modal__content';
+
+  const options = [{ key: null, label: 'None' }];
+  Object.entries(CROP_MASKS).forEach(([key, m]) => {
+    options.push({ key, label: m.label });
+  });
+
+  options.forEach(opt => {
+    const row = document.createElement('div');
+    row.className = 'flyout__row';
+    row.style.cursor = 'pointer';
+
+    const radio = document.createElement('div');
+    radio.className = 'flyout__radio' +
+      (photo.cropMask === opt.key ? ' flyout__radio--selected' : '');
+    row.appendChild(radio);
+
+    const label = document.createElement('div');
+    label.className = 'flyout__label';
+    label.textContent = opt.label;
+    row.appendChild(label);
+
+    row.onclick = () => {
+      photo.cropMask = opt.key;
+
+      // Enforce minimum size when applying a mask
+      if (opt.key) {
+        const minSize = getMinPhotoSize(photo);
+        if (photo.width < minSize.width) photo.width = minSize.width;
+        if (photo.height < minSize.height) photo.height = minSize.height;
+      }
+
+      overlay.remove();
+      render();
+    };
+
+    content.appendChild(row);
+  });
+
+  modal.appendChild(content);
+  overlay.appendChild(modal);
+  document.body.appendChild(overlay);
 }
 
 // Create resize handles for the selected photo
@@ -689,7 +807,7 @@ function createSizeInfo(photo, container) {
   info.className = 'photo-size-info';
   info.setAttribute('data-html2canvas-ignore', 'true');
   info.style.right = CONTROL_INSET_PX + 'px';
-  info.style.top = CONTROL_INSET_PX + 'px';
+  info.style.top = (CONTROL_INSET_PX + BUTTON_SIZE_LG_PX + 4) + 'px';
 
   const aspectLine = document.createElement('div');
   aspectLine.textContent = arW + ' : ' + arH;
@@ -870,6 +988,19 @@ function renderCollagePage() {
       // Create photo control buttons using helper
       createPhotoControls(pageIndex, idx, inCropMode, container);
 
+      // Gear button for crop mask settings (top-right)
+      const gearButton = createIconButton({
+        iconSrc: 'icons/cog-outline.svg',
+        alt: 'Crop mask settings',
+        onClick: e => {
+          e.stopPropagation();
+          showCropMaskModal(pageIndex, idx);
+        },
+        position: { right: CONTROL_INSET_PX + 'px', top: CONTROL_INSET_PX + 'px' },
+        counterScale: 'top right',
+      });
+      container.appendChild(gearButton);
+
       // Create size info readout using helper
       createSizeInfo(photo, container);
     }
@@ -975,8 +1106,9 @@ function applyCropAspectPreset(photo, page, mode) {
   let targetWidth = desiredWidth * scale;
   let targetHeight = desiredHeight * scale;
 
-  if (targetWidth < MIN_PHOTO_SIZE_PX || targetHeight < MIN_PHOTO_SIZE_PX) {
-    const upScale = Math.max(MIN_PHOTO_SIZE_PX / targetWidth, MIN_PHOTO_SIZE_PX / targetHeight);
+  const minSize = getMinPhotoSize(photo);
+  if (targetWidth < minSize.width || targetHeight < minSize.height) {
+    const upScale = Math.max(minSize.width / targetWidth, minSize.height / targetHeight);
     targetWidth *= upScale;
     targetHeight *= upScale;
   }
@@ -1044,7 +1176,8 @@ window.importPhoto = function(event) {
         imageWidth: width,
         imageHeight: height,
         imageOffsetX: 0,
-        imageOffsetY: 0
+        imageOffsetY: 0,
+        cropMask: null
       });
       state.selection.photoIdx = page.photos.length - 1;
       render();
@@ -1554,6 +1687,7 @@ function handlePointerMove(pageX, pageY) {
     // Resize the crop mask (container) while the image stays
     // the same size underneath. In crop mode we use edge
     // handles (n, s, e, w) that move a single edge.
+    const minSize = getMinPhotoSize(photo);
     let newWidth = state.resize.orig.width;
     let newHeight = state.resize.orig.height;
     let newX = state.resize.orig.x;
@@ -1622,19 +1756,19 @@ function handlePointerMove(pageX, pageY) {
       }
     }
 
-    if (newWidth < MIN_PHOTO_SIZE_PX) {
-      const diff = MIN_PHOTO_SIZE_PX - newWidth;
+    if (newWidth < minSize.width) {
+      const diff = minSize.width - newWidth;
       if (handle === 'w') {
         newX -= diff;
       }
-      newWidth = MIN_PHOTO_SIZE_PX;
+      newWidth = minSize.width;
     }
-    if (newHeight < MIN_PHOTO_SIZE_PX) {
-      const diff = MIN_PHOTO_SIZE_PX - newHeight;
+    if (newHeight < minSize.height) {
+      const diff = minSize.height - newHeight;
       if (handle === 'n') {
         newY -= diff;
       }
-      newHeight = MIN_PHOTO_SIZE_PX;
+      newHeight = minSize.height;
     }
 
     // Keep the mask within the page bounds
@@ -1653,8 +1787,8 @@ function handlePointerMove(pageX, pageY) {
       newHeight = pageHeight - newY;
     }
 
-    if (newWidth < MIN_PHOTO_SIZE_PX) newWidth = MIN_PHOTO_SIZE_PX;
-    if (newHeight < MIN_PHOTO_SIZE_PX) newHeight = MIN_PHOTO_SIZE_PX;
+    if (newWidth < minSize.width) newWidth = minSize.width;
+    if (newHeight < minSize.height) newHeight = minSize.height;
 
     photo.width = newWidth;
     photo.height = newHeight;
@@ -1665,6 +1799,7 @@ function handlePointerMove(pageX, pageY) {
   } else {
     // Normal resize: resize the bounding box and scale the
     // underlying image and any existing crop along with it.
+    const minSize = getMinPhotoSize(photo);
     let newWidth = state.resize.orig.width;
     let newHeight = state.resize.orig.height;
     let newX = state.resize.orig.x;
@@ -1697,12 +1832,12 @@ function handlePointerMove(pageX, pageY) {
 
       if (state.resize.orig.dominant === 'width') {
         let targetWidth = state.resize.orig.width + widthChange;
-        if (targetWidth < MIN_PHOTO_SIZE_PX) targetWidth = MIN_PHOTO_SIZE_PX;
+        if (targetWidth < minSize.width) targetWidth = minSize.width;
         newWidth = targetWidth;
         newHeight = newWidth / aspect;
       } else {
         let targetHeight = state.resize.orig.height + heightChange;
-        if (targetHeight < MIN_PHOTO_SIZE_PX) targetHeight = MIN_PHOTO_SIZE_PX;
+        if (targetHeight < minSize.height) targetHeight = minSize.height;
         newHeight = targetHeight;
         newWidth = newHeight * aspect;
       }
@@ -1726,19 +1861,19 @@ function handlePointerMove(pageX, pageY) {
         newY = state.resize.orig.y + dy;
       }
 
-      if (newWidth < MIN_PHOTO_SIZE_PX) {
-        const diff = MIN_PHOTO_SIZE_PX - newWidth;
+      if (newWidth < minSize.width) {
+        const diff = minSize.width - newWidth;
         if (state.resize.orig.handle === 'w') {
           newX -= diff;
         }
-        newWidth = MIN_PHOTO_SIZE_PX;
+        newWidth = minSize.width;
       }
-      if (newHeight < MIN_PHOTO_SIZE_PX) {
-        const diff = MIN_PHOTO_SIZE_PX - newHeight;
+      if (newHeight < minSize.height) {
+        const diff = minSize.height - newHeight;
         if (state.resize.orig.handle === 'n') {
           newY -= diff;
         }
-        newHeight = MIN_PHOTO_SIZE_PX;
+        newHeight = minSize.height;
       }
     }
 
@@ -1757,8 +1892,8 @@ function handlePointerMove(pageX, pageY) {
       newHeight = pageHeight - newY;
     }
 
-    if (newWidth < MIN_PHOTO_SIZE_PX) newWidth = MIN_PHOTO_SIZE_PX;
-    if (newHeight < MIN_PHOTO_SIZE_PX) newHeight = MIN_PHOTO_SIZE_PX;
+    if (newWidth < minSize.width) newWidth = minSize.width;
+    if (newHeight < minSize.height) newHeight = minSize.height;
 
     photo.width = newWidth;
     photo.height = newHeight;
