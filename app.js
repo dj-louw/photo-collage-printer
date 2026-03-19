@@ -990,7 +990,7 @@ function renderCollagePage() {
 
       // Gear button for crop mask settings (top-right)
       const gearButton = createIconButton({
-        iconSrc: 'icons/cog-outline.svg',
+        iconSrc: 'icons/dots-vertical.svg',
         alt: 'Crop mask settings',
         onClick: e => {
           e.stopPropagation();
