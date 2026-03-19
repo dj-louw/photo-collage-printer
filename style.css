@@ -39,6 +39,10 @@ body {
   background: #f0f0f0;
 }
 
+#global-controls .icon-btn.handle-active {
+  background-color: #4daaec;
+}
+
 /* Settings flyout positioning */
 .settings-flyout {
   position: absolute;
@@ -93,7 +97,7 @@ body {
 
 .collage-page {
   border: 1px solid #ccc;
-  background: #fafafa;
+  background: #d2d2d2;
   min-height: 800px;
   position: relative;
   /* Allow handles and controls around photos to remain
@@ -133,7 +137,16 @@ body {
   box-shadow: 0 1px 4px rgba(0,0,0,0.08);
 }
 
-/* Use outline so selection doesn’t change layout/size. */
+/* Cut-line overlay rendered above masks inside the container. */
+.cut-line-overlay {
+  position: absolute;
+  inset: -1px;
+  border: 1px dashed #999;
+  pointer-events: none;
+  z-index: 2;
+}
+
+/* Selection outline overrides cut-line when the photo is selected. */
 .photo-container.selected {
   outline: 2px solid #0078d4;
   /* Ensure the selected photo and its controls (including
@@ -338,6 +351,7 @@ body.printing-pdf .photo-container {
 
 body.printing-pdf .collage-page {
   outline: none;
+  background: #ffffff !important;
 }
 
 body.printing-pdf .resize-handle {

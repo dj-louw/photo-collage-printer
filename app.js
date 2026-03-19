@@ -152,6 +152,8 @@ const state = {
   ui: {
     // Responsive scaling factor applied to collage pages
     pageScale: 1,
+    // Whether cut-lines are shown around photos
+    cutLines: true,
   },
 };
 
@@ -321,7 +323,7 @@ function loadInitialSamplePhotos() {
         imageHeight: heightPx,
         imageOffsetX: 0,
         imageOffsetY: 0,
-        cropMask: null
+        cropMask: 'border-3mm'
       };
 
       page.photos.push(photo);
@@ -403,6 +405,14 @@ function updateSettingsUI() {
   });
 }
 
+// Update cut-lines button active state
+function updateCutLinesButton() {
+  const btn = document.getElementById('cutlines-button');
+  if (btn) {
+    btn.classList.toggle('handle-active', state.ui.cutLines);
+  }
+}
+
 // Initialize global control event handlers (called once on load)
 function initGlobalControls() {
   // Print button
@@ -416,6 +426,15 @@ function initGlobalControls() {
     e.stopPropagation();
     toggleSettings();
   };
+
+  // Cut-lines button
+  document.getElementById('cutlines-button').onclick = e => {
+    e.stopPropagation();
+    state.ui.cutLines = !state.ui.cutLines;
+    updateCutLinesButton();
+    render();
+  };
+  updateCutLinesButton();
 
   // GitHub button
   document.getElementById('github-button').onclick = e => {
@@ -1033,6 +1052,13 @@ function renderCollagePage() {
     const mask = createPhotoMask(photo, pageIndex, idx);
     container.appendChild(mask);
 
+    // Cut-line overlay (rendered above mask and crop mask strips)
+    if (state.ui.cutLines) {
+      const cutLine = document.createElement('div');
+      cutLine.className = 'cut-line-overlay';
+      container.appendChild(cutLine);
+    }
+
     // Show resize/crop handles only for the selected
     // photo on the active page.
     if (isSelectedOnActivePage) {
@@ -1238,7 +1264,7 @@ window.importPhoto = function(event) {
         imageHeight: height,
         imageOffsetX: 0,
         imageOffsetY: 0,
-        cropMask: null
+        cropMask: 'border-3mm'
       });
       state.selection.photoIdx = page.photos.length - 1;
       render();
