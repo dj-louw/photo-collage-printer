@@ -518,42 +518,53 @@ function createPhotoMask(photo, pageIndex, idx) {
     const rightPx = m.right * PX_PER_MM;
     const bottomPx = m.bottom * PX_PER_MM;
     const leftPx = m.left * PX_PER_MM;
-    const radiusPx = (m.borderRadius || 0) * PX_PER_MM;
+    const r = Math.min(
+      (m.borderRadius || 0) * PX_PER_MM,
+      (photo.width - leftPx - rightPx) / 2,
+      (photo.height - topPx - bottomPx) / 2
+    );
 
-    if (radiusPx > 0) {
-      // Rounded mask: single inner div with box-shadow to fill the border area
-      const inner = document.createElement('div');
-      inner.className = 'crop-mask-strip';
-      inner.style.position = 'absolute';
-      inner.style.top = topPx + 'px';
-      inner.style.left = leftPx + 'px';
-      inner.style.right = rightPx + 'px';
-      inner.style.bottom = bottomPx + 'px';
-      inner.style.borderRadius = radiusPx + 'px';
-      // Large spread shadow covers the border area; container clips it
-      inner.style.boxShadow = '0 0 0 9999px ' + m.color;
-      inner.style.zIndex = '1';
-      inner.style.pointerEvents = 'none';
-      mask.appendChild(inner);
+    const w = photo.width;
+    const h = photo.height;
+    const ix = leftPx;
+    const iy = topPx;
+    const iw = w - leftPx - rightPx;
+    const ih = h - topPx - bottomPx;
+
+    // Outer rect + inner cutout (with optional rounding) via evenodd fill
+    let d = `M0,0H${w}V${h}H0Z`;
+    if (r > 0) {
+      d += ` M${ix + r},${iy}`
+        + ` H${ix + iw - r}`
+        + ` A${r},${r} 0 0 1 ${ix + iw},${iy + r}`
+        + ` V${iy + ih - r}`
+        + ` A${r},${r} 0 0 1 ${ix + iw - r},${iy + ih}`
+        + ` H${ix + r}`
+        + ` A${r},${r} 0 0 1 ${ix},${iy + ih - r}`
+        + ` V${iy + r}`
+        + ` A${r},${r} 0 0 1 ${ix + r},${iy}`
+        + ` Z`;
     } else {
-      // Straight mask: four border strips
-      const strips = [
-        { top: '0', left: '0', width: '100%', height: topPx + 'px' },
-        { bottom: '0', left: '0', width: '100%', height: bottomPx + 'px' },
-        { top: topPx + 'px', left: '0', width: leftPx + 'px', bottom: bottomPx + 'px' },
-        { top: topPx + 'px', right: '0', width: rightPx + 'px', bottom: bottomPx + 'px' }
-      ];
-      strips.forEach(s => {
-        const strip = document.createElement('div');
-        strip.className = 'crop-mask-strip';
-        strip.style.position = 'absolute';
-        strip.style.background = m.color;
-        strip.style.zIndex = '1';
-        strip.style.pointerEvents = 'none';
-        Object.keys(s).forEach(k => { strip.style[k] = s[k]; });
-        mask.appendChild(strip);
-      });
+      d += ` M${ix},${iy}H${ix + iw}V${iy + ih}H${ix}Z`;
     }
+
+    const svgNS = 'http://www.w3.org/2000/svg';
+    const svg = document.createElementNS(svgNS, 'svg');
+    svg.setAttribute('viewBox', `0 0 ${w} ${h}`);
+    svg.setAttribute('width', '100%');
+    svg.setAttribute('height', '100%');
+    svg.style.position = 'absolute';
+    svg.style.inset = '0';
+    svg.style.zIndex = '1';
+    svg.style.pointerEvents = 'none';
+
+    const path = document.createElementNS(svgNS, 'path');
+    path.setAttribute('d', d);
+    path.setAttribute('fill', m.color);
+    path.setAttribute('fill-rule', 'evenodd');
+    svg.appendChild(path);
+
+    mask.appendChild(svg);
   }
 
   return mask;
