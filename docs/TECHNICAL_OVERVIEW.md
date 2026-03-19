@@ -65,6 +65,10 @@ All application state is held in JavaScript variables in app.js:
     - `imageOffsetY: number` – top offset of the image relative to the crop box (usually ≤ 0).
   - `rotation: number`
     - Logical rotation in 90° steps; currently not used for CSS transforms but kept for potential future use.
+  - `cropMask: string | null`
+    - Identifier of the active crop mask overlay, or `null` for no mask.
+    - Current values: `'border-3mm'` (3mm white border all sides), `'polaroid'` (3mm top/left/right, 15mm bottom).
+    - Mask definitions live in the `CROP_MASKS` registry constant at the top of `app.js`.
 - Selection and interaction state
   - Selection
     - `selectedPhoto: number | null` – index of the currently selected photo *on the active page*.
@@ -127,6 +131,7 @@ Each page and photo is rendered as a nested DOM structure.
     - `.photo-mask` div inside `container`.
     - Positioned to fill the container (`inset: 0`) with `overflow: hidden`.
     - Defines the *visible* region (crop box); anything outside is clipped.
+    - If the photo has a `cropMask` set, four `.crop-mask-strip` divs are appended after the `<img>`, rendering opaque white border strips at the defined mm insets. These sit above the image (`z-index: 1`) and are pointer-transparent.
   - `img.photo`
     - Absolutely positioned inside `.photo-mask`:
       - `left = imageOffsetX`, `top = imageOffsetY`.
@@ -160,6 +165,12 @@ Each page and photo is rendered as a nested DOM structure.
       - Clicking these buttons:
         - Rotate → rotates the image 90° clockwise while preserving crop and zoom.
         - Crop toggle → enters/exits crop mode for that photo.
+    - Crop mask gear button and size readout (top-right of selected photo):
+      - A gear icon button at `right: 4px; top: 4px` opens the crop mask selection modal.
+      - The size info readout (aspect ratio + mm dimensions) is positioned below the gear button.
+    - Crop mask selection modal:
+      - Dynamically created overlay with radio-button rows for each mask option (None, Simple border, Polaroid).
+      - Selecting a mask sets `photo.cropMask` and re-renders; minimum size constraints are enforced.
 
 ## Interactions and Behavior
 

@@ -46,6 +46,39 @@ const CROP_PRESET_3_4_HEIGHT_MM = 150;
 // suitable for high-quality photo printing.
 const PDF_EXPORT_SCALE = 4;
 
+// Crop mask definitions. Each mask specifies insets (in mm)
+// that define opaque border strips overlaid on the image.
+const CROP_MASKS = {
+  'border-3mm': {
+    label: 'Simple 3mm border',
+    top: 3, right: 3, bottom: 3, left: 3,
+    color: '#ffffff',
+    icon: 'icons/crop-mask-border.svg',
+    borderRadius: 0
+  },
+  'polaroid': {
+    label: 'Polaroid',
+    top: 3, right: 3, bottom: 15, left: 3,
+    color: '#ffffff',
+    icon: 'icons/crop-mask-polaroid.svg',
+    borderRadius: 0
+  },
+  'border-3mm-rounded': {
+    label: 'Rounded border',
+    top: 3, right: 3, bottom: 3, left: 3,
+    color: '#ffffff',
+    icon: 'icons/crop-mask-border-rounded.svg',
+    borderRadius: 3
+  },
+  'polaroid-rounded': {
+    label: 'Rounded Polaroid',
+    top: 3, right: 3, bottom: 15, left: 3,
+    color: '#ffffff',
+    icon: 'icons/crop-mask-polaroid-rounded.svg',
+    borderRadius: 3
+  }
+};
+
 // ─────────────────────────────────────────────────────────────
 // State
 // ─────────────────────────────────────────────────────────────
@@ -119,6 +152,8 @@ const state = {
   ui: {
     // Responsive scaling factor applied to collage pages
     pageScale: 1,
+    // Whether cut-lines are shown around photos
+    cutLines: true,
   },
 };
 
@@ -287,7 +322,8 @@ function loadInitialSamplePhotos() {
         imageWidth: widthPx,
         imageHeight: heightPx,
         imageOffsetX: 0,
-        imageOffsetY: 0
+        imageOffsetY: 0,
+        cropMask: 'border-3mm'
       };
 
       page.photos.push(photo);
@@ -369,6 +405,14 @@ function updateSettingsUI() {
   });
 }
 
+// Update cut-lines button active state
+function updateCutLinesButton() {
+  const btn = document.getElementById('cutlines-button');
+  if (btn) {
+    btn.classList.toggle('handle-active', state.ui.cutLines);
+  }
+}
+
 // Initialize global control event handlers (called once on load)
 function initGlobalControls() {
   // Print button
@@ -382,6 +426,15 @@ function initGlobalControls() {
     e.stopPropagation();
     toggleSettings();
   };
+
+  // Cut-lines button
+  document.getElementById('cutlines-button').onclick = e => {
+    e.stopPropagation();
+    state.ui.cutLines = !state.ui.cutLines;
+    updateCutLinesButton();
+    render();
+  };
+  updateCutLinesButton();
 
   // GitHub button
   document.getElementById('github-button').onclick = e => {
@@ -457,20 +510,189 @@ function createPhotoMask(photo, pageIndex, idx) {
   };
 
   mask.appendChild(img);
+
+  // Overlay crop mask border if a mask is active
+  if (photo.cropMask && CROP_MASKS[photo.cropMask]) {
+    const m = CROP_MASKS[photo.cropMask];
+    const topPx = m.top * PX_PER_MM;
+    const rightPx = m.right * PX_PER_MM;
+    const bottomPx = m.bottom * PX_PER_MM;
+    const leftPx = m.left * PX_PER_MM;
+    const r = Math.min(
+      (m.borderRadius || 0) * PX_PER_MM,
+      (photo.width - leftPx - rightPx) / 2,
+      (photo.height - topPx - bottomPx) / 2
+    );
+
+    const w = photo.width;
+    const h = photo.height;
+    const ix = leftPx;
+    const iy = topPx;
+    const iw = w - leftPx - rightPx;
+    const ih = h - topPx - bottomPx;
+
+    // Outer rect + inner cutout (with optional rounding) via evenodd fill
+    let d = `M0,0H${w}V${h}H0Z`;
+    if (r > 0) {
+      d += ` M${ix + r},${iy}`
+        + ` H${ix + iw - r}`
+        + ` A${r},${r} 0 0 1 ${ix + iw},${iy + r}`
+        + ` V${iy + ih - r}`
+        + ` A${r},${r} 0 0 1 ${ix + iw - r},${iy + ih}`
+        + ` H${ix + r}`
+        + ` A${r},${r} 0 0 1 ${ix},${iy + ih - r}`
+        + ` V${iy + r}`
+        + ` A${r},${r} 0 0 1 ${ix + r},${iy}`
+        + ` Z`;
+    } else {
+      d += ` M${ix},${iy}H${ix + iw}V${iy + ih}H${ix}Z`;
+    }
+
+    const svgNS = 'http://www.w3.org/2000/svg';
+    const svg = document.createElementNS(svgNS, 'svg');
+    svg.setAttribute('viewBox', `0 0 ${w} ${h}`);
+    svg.setAttribute('width', '100%');
+    svg.setAttribute('height', '100%');
+    svg.style.position = 'absolute';
+    svg.style.inset = '0';
+    svg.style.zIndex = '1';
+    svg.style.pointerEvents = 'none';
+
+    const path = document.createElementNS(svgNS, 'path');
+    path.setAttribute('d', d);
+    path.setAttribute('fill', m.color);
+    path.setAttribute('fill-rule', 'evenodd');
+    svg.appendChild(path);
+
+    mask.appendChild(svg);
+  }
+
   return mask;
+}
+
+// Return the minimum photo box size accounting for crop mask insets.
+function getMinPhotoSize(photo) {
+  if (photo.cropMask && CROP_MASKS[photo.cropMask]) {
+    const m = CROP_MASKS[photo.cropMask];
+    return {
+      width: (m.left + m.right) * PX_PER_MM + MIN_PHOTO_SIZE_PX,
+      height: (m.top + m.bottom) * PX_PER_MM + MIN_PHOTO_SIZE_PX
+    };
+  }
+  return { width: MIN_PHOTO_SIZE_PX, height: MIN_PHOTO_SIZE_PX };
+}
+
+// Show the crop mask selection modal for the given photo.
+function showCropMaskModal(pageIndex, photoIdx) {
+  const page = state.document.pages[pageIndex];
+  if (!page) return;
+  const photo = page.photos[photoIdx];
+  if (!photo) return;
+
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay crop-mask-overlay';
+  overlay.onclick = e => { if (e.target === overlay) overlay.remove(); };
+
+  const modal = document.createElement('div');
+  modal.className = 'modal';
+
+  const title = document.createElement('div');
+  title.className = 'modal__title';
+  title.textContent = 'Crop Mask';
+  modal.appendChild(title);
+
+  const content = document.createElement('div');
+  content.className = 'modal__content';
+
+  // Crop mask grid
+  const grid = document.createElement('div');
+  grid.className = 'crop-mask-grid';
+
+  const options = [{ key: null, label: 'None', icon: 'icons/close.svg' }];
+  Object.entries(CROP_MASKS).forEach(([key, m]) => {
+    options.push({ key, label: m.label, icon: m.icon });
+  });
+
+  options.forEach(opt => {
+    const isSelected = photo.cropMask === opt.key;
+    const cell = document.createElement('div');
+    cell.className = 'crop-mask-grid__cell' + (isSelected ? ' crop-mask-grid__cell--active' : '');
+    cell.style.cursor = 'pointer';
+
+    const icon = document.createElement('img');
+    icon.src = opt.icon;
+    icon.alt = opt.label;
+    icon.className = 'crop-mask-grid__icon';
+    cell.appendChild(icon);
+
+    const label = document.createElement('div');
+    label.className = 'crop-mask-grid__label';
+    label.textContent = opt.label;
+    cell.appendChild(label);
+
+    cell.onclick = () => {
+      photo.cropMask = opt.key;
+
+      // Enforce minimum size when applying a mask
+      if (opt.key) {
+        const minSize = getMinPhotoSize(photo);
+        if (photo.width < minSize.width) photo.width = minSize.width;
+        if (photo.height < minSize.height) photo.height = minSize.height;
+      }
+
+      overlay.remove();
+      render();
+    };
+
+    grid.appendChild(cell);
+  });
+
+  content.appendChild(grid);
+
+  // Separator before delete
+  const separator = document.createElement('div');
+  separator.className = 'modal__separator';
+  content.appendChild(separator);
+
+  // Delete button row
+  const deleteRow = document.createElement('div');
+  deleteRow.className = 'flyout__row flyout__row--danger';
+  deleteRow.style.cursor = 'pointer';
+
+  const deleteIcon = document.createElement('img');
+  deleteIcon.src = 'icons/delete-outline.svg';
+  deleteIcon.alt = 'Delete photo';
+  deleteIcon.className = 'photo-size-info__icon';
+  deleteIcon.style.marginRight = '8px';
+  deleteRow.appendChild(deleteIcon);
+
+  const deleteLabel = document.createElement('div');
+  deleteLabel.className = 'flyout__label';
+  deleteLabel.textContent = 'Delete photo';
+  deleteRow.appendChild(deleteLabel);
+
+  deleteRow.onclick = () => {
+    overlay.remove();
+    deletePhoto(pageIndex, photoIdx);
+  };
+
+  content.appendChild(deleteRow);
+
+  modal.appendChild(content);
+  overlay.appendChild(modal);
+  document.body.appendChild(overlay);
 }
 
 // Create resize handles for the selected photo
 function createResizeHandles(pageIndex, idx, photo, inCropMode, container) {
-  const insetPx = CONTROL_INSET_PX + 'px';
   const handlePositions = inCropMode
     ? [
-        { name: 's', left: '50%', bottom: insetPx, cursor: 'ns-resize', transform: 'translateX(-50%)' },
-        { name: 'w', left: insetPx, top: '50%', cursor: 'ew-resize', transform: 'translateY(-50%)' },
-        { name: 'e', right: insetPx, top: '50%', cursor: 'ew-resize', transform: 'translateY(-50%)' }
+        { name: 's', left: '50%', bottom: CONTROL_INSET_PX + 'px', cursor: 'ns-resize', transform: 'translateX(-50%)' },
+        { name: 'w', left: CONTROL_INSET_PX + 'px', top: '50%', cursor: 'ew-resize', transform: 'translateY(-50%)' },
+        { name: 'e', right: CONTROL_INSET_PX + 'px', top: '50%', cursor: 'ew-resize', transform: 'translateY(-50%)' }
       ]
     : [
-        { name: 'se', right: insetPx, bottom: insetPx, cursor: 'nwse-resize' }
+        { name: 'se', right: -(HANDLE_SIZE_PX + CONTROL_INSET_PX) + 'px', bottom: -(HANDLE_SIZE_PX + CONTROL_INSET_PX) + 'px', cursor: 'nwse-resize' }
       ];
 
   handlePositions.forEach(pos => {
@@ -587,9 +809,9 @@ function createImageFrame(pageIndex, idx, photo, container) {
   container.appendChild(imageFrame);
 }
 
-// Create photo control buttons (rotate, crop, ratio presets, delete)
+// Create photo control buttons (rotate, crop, ratio presets)
 function createPhotoControls(pageIndex, idx, inCropMode, container) {
-  const insetPx = CONTROL_INSET_PX + 'px';
+  const outsideTop = -(BUTTON_SIZE_LG_PX + CONTROL_INSET_PX) + 'px';
 
   // Rotate button
   const rotateButton = createIconButton({
@@ -600,8 +822,8 @@ function createPhotoControls(pageIndex, idx, inCropMode, container) {
       state.document.currentPage = pageIndex;
       rotatePhoto(idx);
     },
-    position: { left: insetPx, top: insetPx },
-    counterScale: 'top left',
+    position: { left: '0', top: outsideTop },
+    counterScale: 'bottom left',
   });
   container.appendChild(rotateButton);
 
@@ -615,8 +837,8 @@ function createPhotoControls(pageIndex, idx, inCropMode, container) {
       toggleCrop(idx);
     },
     extraClasses: 'crop-toggle',
-    position: { left: (BUTTON_SIZE_LG_PX + CONTROL_INSET_PX) + 'px', top: insetPx },
-    counterScale: 'top left',
+    position: { left: (BUTTON_SIZE_LG_PX + CONTROL_INSET_PX) + 'px', top: outsideTop },
+    counterScale: 'bottom left',
   });
   container.appendChild(cropButton);
 
@@ -650,26 +872,13 @@ function createPhotoControls(pageIndex, idx, inCropMode, container) {
           render();
         },
         extraClasses: 'crop-ratio-toggle' + (isActive ? ' crop-ratio-active' : ''),
-        position: { left: cfg.offset + 'px', top: insetPx },
-        counterScale: 'top left',
+        position: { left: cfg.offset + 'px', top: outsideTop },
+        counterScale: 'bottom left',
       });
       container.appendChild(btn);
     });
   }
 
-  // Delete button
-  const deleteButton = createIconButton({
-    iconSrc: 'icons/delete-outline.svg',
-    alt: 'Delete photo',
-    onClick: e => {
-      e.stopPropagation();
-      state.document.currentPage = pageIndex;
-      deletePhoto(pageIndex, idx);
-    },
-    position: { left: insetPx, bottom: insetPx },
-    counterScale: 'bottom left',
-  });
-  container.appendChild(deleteButton);
 }
 
 // Create the size info readout for a selected photo
@@ -688,8 +897,8 @@ function createSizeInfo(photo, container) {
   const info = document.createElement('div');
   info.className = 'photo-size-info';
   info.setAttribute('data-html2canvas-ignore', 'true');
-  info.style.right = CONTROL_INSET_PX + 'px';
-  info.style.top = CONTROL_INSET_PX + 'px';
+  info.style.left = 'calc(100% + ' + CONTROL_INSET_PX + 'px)';
+  info.style.top = (BUTTON_SIZE_LG_PX + CONTROL_INSET_PX) + 'px';
 
   const aspectLine = document.createElement('div');
   aspectLine.textContent = arW + ' : ' + arH;
@@ -719,7 +928,7 @@ function createSizeInfo(photo, container) {
   info.appendChild(aspectLine);
   info.appendChild(widthLine);
   info.appendChild(heightLine);
-  applyCounterScale(info, 'right top');
+  applyCounterScale(info, 'left top');
   container.appendChild(info);
 }
 
@@ -854,6 +1063,13 @@ function renderCollagePage() {
     const mask = createPhotoMask(photo, pageIndex, idx);
     container.appendChild(mask);
 
+    // Cut-line overlay (rendered above mask and crop mask strips)
+    if (state.ui.cutLines) {
+      const cutLine = document.createElement('div');
+      cutLine.className = 'cut-line-overlay';
+      container.appendChild(cutLine);
+    }
+
     // Show resize/crop handles only for the selected
     // photo on the active page.
     if (isSelectedOnActivePage) {
@@ -869,6 +1085,19 @@ function renderCollagePage() {
 
       // Create photo control buttons using helper
       createPhotoControls(pageIndex, idx, inCropMode, container);
+
+      // Gear button for crop mask settings (outside top-right)
+      const gearButton = createIconButton({
+        iconSrc: 'icons/dots-vertical.svg',
+        alt: 'Crop mask settings',
+        onClick: e => {
+          e.stopPropagation();
+          showCropMaskModal(pageIndex, idx);
+        },
+        position: { right: -(BUTTON_SIZE_LG_PX + CONTROL_INSET_PX) + 'px', top: '0' },
+        counterScale: 'bottom left',
+      });
+      container.appendChild(gearButton);
 
       // Create size info readout using helper
       createSizeInfo(photo, container);
@@ -975,8 +1204,9 @@ function applyCropAspectPreset(photo, page, mode) {
   let targetWidth = desiredWidth * scale;
   let targetHeight = desiredHeight * scale;
 
-  if (targetWidth < MIN_PHOTO_SIZE_PX || targetHeight < MIN_PHOTO_SIZE_PX) {
-    const upScale = Math.max(MIN_PHOTO_SIZE_PX / targetWidth, MIN_PHOTO_SIZE_PX / targetHeight);
+  const minSize = getMinPhotoSize(photo);
+  if (targetWidth < minSize.width || targetHeight < minSize.height) {
+    const upScale = Math.max(minSize.width / targetWidth, minSize.height / targetHeight);
     targetWidth *= upScale;
     targetHeight *= upScale;
   }
@@ -1044,7 +1274,8 @@ window.importPhoto = function(event) {
         imageWidth: width,
         imageHeight: height,
         imageOffsetX: 0,
-        imageOffsetY: 0
+        imageOffsetY: 0,
+        cropMask: 'border-3mm'
       });
       state.selection.photoIdx = page.photos.length - 1;
       render();
@@ -1554,6 +1785,7 @@ function handlePointerMove(pageX, pageY) {
     // Resize the crop mask (container) while the image stays
     // the same size underneath. In crop mode we use edge
     // handles (n, s, e, w) that move a single edge.
+    const minSize = getMinPhotoSize(photo);
     let newWidth = state.resize.orig.width;
     let newHeight = state.resize.orig.height;
     let newX = state.resize.orig.x;
@@ -1622,19 +1854,19 @@ function handlePointerMove(pageX, pageY) {
       }
     }
 
-    if (newWidth < MIN_PHOTO_SIZE_PX) {
-      const diff = MIN_PHOTO_SIZE_PX - newWidth;
+    if (newWidth < minSize.width) {
+      const diff = minSize.width - newWidth;
       if (handle === 'w') {
         newX -= diff;
       }
-      newWidth = MIN_PHOTO_SIZE_PX;
+      newWidth = minSize.width;
     }
-    if (newHeight < MIN_PHOTO_SIZE_PX) {
-      const diff = MIN_PHOTO_SIZE_PX - newHeight;
+    if (newHeight < minSize.height) {
+      const diff = minSize.height - newHeight;
       if (handle === 'n') {
         newY -= diff;
       }
-      newHeight = MIN_PHOTO_SIZE_PX;
+      newHeight = minSize.height;
     }
 
     // Keep the mask within the page bounds
@@ -1653,8 +1885,8 @@ function handlePointerMove(pageX, pageY) {
       newHeight = pageHeight - newY;
     }
 
-    if (newWidth < MIN_PHOTO_SIZE_PX) newWidth = MIN_PHOTO_SIZE_PX;
-    if (newHeight < MIN_PHOTO_SIZE_PX) newHeight = MIN_PHOTO_SIZE_PX;
+    if (newWidth < minSize.width) newWidth = minSize.width;
+    if (newHeight < minSize.height) newHeight = minSize.height;
 
     photo.width = newWidth;
     photo.height = newHeight;
@@ -1665,6 +1897,7 @@ function handlePointerMove(pageX, pageY) {
   } else {
     // Normal resize: resize the bounding box and scale the
     // underlying image and any existing crop along with it.
+    const minSize = getMinPhotoSize(photo);
     let newWidth = state.resize.orig.width;
     let newHeight = state.resize.orig.height;
     let newX = state.resize.orig.x;
@@ -1697,12 +1930,12 @@ function handlePointerMove(pageX, pageY) {
 
       if (state.resize.orig.dominant === 'width') {
         let targetWidth = state.resize.orig.width + widthChange;
-        if (targetWidth < MIN_PHOTO_SIZE_PX) targetWidth = MIN_PHOTO_SIZE_PX;
+        if (targetWidth < minSize.width) targetWidth = minSize.width;
         newWidth = targetWidth;
         newHeight = newWidth / aspect;
       } else {
         let targetHeight = state.resize.orig.height + heightChange;
-        if (targetHeight < MIN_PHOTO_SIZE_PX) targetHeight = MIN_PHOTO_SIZE_PX;
+        if (targetHeight < minSize.height) targetHeight = minSize.height;
         newHeight = targetHeight;
         newWidth = newHeight * aspect;
       }
@@ -1726,19 +1959,19 @@ function handlePointerMove(pageX, pageY) {
         newY = state.resize.orig.y + dy;
       }
 
-      if (newWidth < MIN_PHOTO_SIZE_PX) {
-        const diff = MIN_PHOTO_SIZE_PX - newWidth;
+      if (newWidth < minSize.width) {
+        const diff = minSize.width - newWidth;
         if (state.resize.orig.handle === 'w') {
           newX -= diff;
         }
-        newWidth = MIN_PHOTO_SIZE_PX;
+        newWidth = minSize.width;
       }
-      if (newHeight < MIN_PHOTO_SIZE_PX) {
-        const diff = MIN_PHOTO_SIZE_PX - newHeight;
+      if (newHeight < minSize.height) {
+        const diff = minSize.height - newHeight;
         if (state.resize.orig.handle === 'n') {
           newY -= diff;
         }
-        newHeight = MIN_PHOTO_SIZE_PX;
+        newHeight = minSize.height;
       }
     }
 
@@ -1757,8 +1990,8 @@ function handlePointerMove(pageX, pageY) {
       newHeight = pageHeight - newY;
     }
 
-    if (newWidth < MIN_PHOTO_SIZE_PX) newWidth = MIN_PHOTO_SIZE_PX;
-    if (newHeight < MIN_PHOTO_SIZE_PX) newHeight = MIN_PHOTO_SIZE_PX;
+    if (newWidth < minSize.width) newWidth = minSize.width;
+    if (newHeight < minSize.height) newHeight = minSize.height;
 
     photo.width = newWidth;
     photo.height = newHeight;

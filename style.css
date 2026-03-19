@@ -39,6 +39,10 @@ body {
   background: #f0f0f0;
 }
 
+#global-controls .icon-btn.handle-active {
+  background-color: #4daaec;
+}
+
 /* Settings flyout positioning */
 .settings-flyout {
   position: absolute;
@@ -93,7 +97,7 @@ body {
 
 .collage-page {
   border: 1px solid #ccc;
-  background: #fafafa;
+  background: #d2d2d2;
   min-height: 800px;
   position: relative;
   /* Allow handles and controls around photos to remain
@@ -133,7 +137,16 @@ body {
   box-shadow: 0 1px 4px rgba(0,0,0,0.08);
 }
 
-/* Use outline so selection doesn’t change layout/size. */
+/* Cut-line overlay rendered above masks inside the container. */
+.cut-line-overlay {
+  position: absolute;
+  inset: -1px;
+  border: 1px dashed #999;
+  pointer-events: none;
+  z-index: 2;
+}
+
+/* Selection outline overrides cut-line when the photo is selected. */
 .photo-container.selected {
   outline: 2px solid #0078d4;
   /* Ensure the selected photo and its controls (including
@@ -240,6 +253,56 @@ body {
 }
 
 /* ============================================
+   Crop Mask Selection Grid
+   ============================================ */
+
+.crop-mask-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.crop-mask-grid__cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 4px 8px;
+  border: 2px solid #fff;
+  border-radius: 6px;
+  background: #f5f5f5;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+.crop-mask-grid__cell:hover {
+  background: #e8e8e8;
+}
+
+.crop-mask-grid__cell--active {
+  background-color: #4daaec;
+  border-color: #4daaec;
+  color: #fff;
+}
+
+.crop-mask-grid__cell--active:hover {
+  background-color: #3a9ae0;
+}
+
+.crop-mask-grid__icon {
+  width: 40px;
+  height: 40px;
+  margin-bottom: 6px;
+  pointer-events: none;
+}
+
+.crop-mask-grid__label {
+  font-size: 11px;
+  text-align: center;
+  line-height: 1.2;
+  pointer-events: none;
+}
+
+/* ============================================
    Page Actions (Add/Delete page buttons below page)
    ============================================ */
 
@@ -279,6 +342,7 @@ body.printing-pdf .photo-container {
 
 body.printing-pdf .collage-page {
   outline: none;
+  background: #ffffff !important;
 }
 
 body.printing-pdf .resize-handle {
@@ -390,6 +454,14 @@ body.printing-pdf .help-overlay {
 
 .flyout__row:hover {
   background-color: #f5f5f5;
+}
+
+.flyout__row--danger {
+  color: #d32f2f;
+}
+
+.flyout__row--danger:hover {
+  background-color: #fdecea;
 }
 
 .flyout__radio {
