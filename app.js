@@ -573,6 +573,35 @@ function showCropMaskModal(pageIndex, photoIdx) {
     content.appendChild(row);
   });
 
+  // Separator before delete
+  const separator = document.createElement('div');
+  separator.className = 'modal__separator';
+  content.appendChild(separator);
+
+  // Delete button row
+  const deleteRow = document.createElement('div');
+  deleteRow.className = 'flyout__row flyout__row--danger';
+  deleteRow.style.cursor = 'pointer';
+
+  const deleteIcon = document.createElement('img');
+  deleteIcon.src = 'icons/delete-outline.svg';
+  deleteIcon.alt = 'Delete photo';
+  deleteIcon.className = 'photo-size-info__icon';
+  deleteIcon.style.marginRight = '8px';
+  deleteRow.appendChild(deleteIcon);
+
+  const deleteLabel = document.createElement('div');
+  deleteLabel.className = 'flyout__label';
+  deleteLabel.textContent = 'Delete photo';
+  deleteRow.appendChild(deleteLabel);
+
+  deleteRow.onclick = () => {
+    overlay.remove();
+    deletePhoto(pageIndex, photoIdx);
+  };
+
+  content.appendChild(deleteRow);
+
   modal.appendChild(content);
   overlay.appendChild(modal);
   document.body.appendChild(overlay);
@@ -775,19 +804,6 @@ function createPhotoControls(pageIndex, idx, inCropMode, container) {
     });
   }
 
-  // Delete button
-  const deleteButton = createIconButton({
-    iconSrc: 'icons/delete-outline.svg',
-    alt: 'Delete photo',
-    onClick: e => {
-      e.stopPropagation();
-      state.document.currentPage = pageIndex;
-      deletePhoto(pageIndex, idx);
-    },
-    position: { left: insetPx, bottom: insetPx },
-    counterScale: 'bottom left',
-  });
-  container.appendChild(deleteButton);
 }
 
 // Create the size info readout for a selected photo
