@@ -50,14 +50,32 @@ const PDF_EXPORT_SCALE = 4;
 // that define opaque border strips overlaid on the image.
 const CROP_MASKS = {
   'border-3mm': {
-    label: 'Simple border (3 mm)',
+    label: 'Simple 3mm border',
     top: 3, right: 3, bottom: 3, left: 3,
-    color: '#ffffff'
+    color: '#ffffff',
+    icon: 'icons/crop-mask-border.svg',
+    borderRadius: 0
   },
   'polaroid': {
     label: 'Polaroid',
     top: 3, right: 3, bottom: 15, left: 3,
-    color: '#ffffff'
+    color: '#ffffff',
+    icon: 'icons/crop-mask-polaroid.svg',
+    borderRadius: 0
+  },
+  'border-3mm-rounded': {
+    label: 'Rounded border',
+    top: 3, right: 3, bottom: 3, left: 3,
+    color: '#ffffff',
+    icon: 'icons/crop-mask-border-rounded.svg',
+    borderRadius: 3
+  },
+  'polaroid-rounded': {
+    label: 'Rounded Polaroid',
+    top: 3, right: 3, bottom: 15, left: 3,
+    color: '#ffffff',
+    icon: 'icons/crop-mask-polaroid-rounded.svg',
+    borderRadius: 3
   }
 };
 
@@ -474,29 +492,49 @@ function createPhotoMask(photo, pageIndex, idx) {
 
   mask.appendChild(img);
 
-  // Overlay crop mask border strips if a mask is active
+  // Overlay crop mask border if a mask is active
   if (photo.cropMask && CROP_MASKS[photo.cropMask]) {
     const m = CROP_MASKS[photo.cropMask];
     const topPx = m.top * PX_PER_MM;
     const rightPx = m.right * PX_PER_MM;
     const bottomPx = m.bottom * PX_PER_MM;
     const leftPx = m.left * PX_PER_MM;
-    const strips = [
-      { top: '0', left: '0', width: '100%', height: topPx + 'px' },
-      { bottom: '0', left: '0', width: '100%', height: bottomPx + 'px' },
-      { top: topPx + 'px', left: '0', width: leftPx + 'px', bottom: bottomPx + 'px' },
-      { top: topPx + 'px', right: '0', width: rightPx + 'px', bottom: bottomPx + 'px' }
-    ];
-    strips.forEach(s => {
-      const strip = document.createElement('div');
-      strip.className = 'crop-mask-strip';
-      strip.style.position = 'absolute';
-      strip.style.background = m.color;
-      strip.style.zIndex = '1';
-      strip.style.pointerEvents = 'none';
-      Object.keys(s).forEach(k => { strip.style[k] = s[k]; });
-      mask.appendChild(strip);
-    });
+    const radiusPx = (m.borderRadius || 0) * PX_PER_MM;
+
+    if (radiusPx > 0) {
+      // Rounded mask: single inner div with box-shadow to fill the border area
+      const inner = document.createElement('div');
+      inner.className = 'crop-mask-strip';
+      inner.style.position = 'absolute';
+      inner.style.top = topPx + 'px';
+      inner.style.left = leftPx + 'px';
+      inner.style.right = rightPx + 'px';
+      inner.style.bottom = bottomPx + 'px';
+      inner.style.borderRadius = radiusPx + 'px';
+      // Large spread shadow covers the border area; container clips it
+      inner.style.boxShadow = '0 0 0 9999px ' + m.color;
+      inner.style.zIndex = '1';
+      inner.style.pointerEvents = 'none';
+      mask.appendChild(inner);
+    } else {
+      // Straight mask: four border strips
+      const strips = [
+        { top: '0', left: '0', width: '100%', height: topPx + 'px' },
+        { bottom: '0', left: '0', width: '100%', height: bottomPx + 'px' },
+        { top: topPx + 'px', left: '0', width: leftPx + 'px', bottom: bottomPx + 'px' },
+        { top: topPx + 'px', right: '0', width: rightPx + 'px', bottom: bottomPx + 'px' }
+      ];
+      strips.forEach(s => {
+        const strip = document.createElement('div');
+        strip.className = 'crop-mask-strip';
+        strip.style.position = 'absolute';
+        strip.style.background = m.color;
+        strip.style.zIndex = '1';
+        strip.style.pointerEvents = 'none';
+        Object.keys(s).forEach(k => { strip.style[k] = s[k]; });
+        mask.appendChild(strip);
+      });
+    }
   }
 
   return mask;
@@ -536,27 +574,33 @@ function showCropMaskModal(pageIndex, photoIdx) {
   const content = document.createElement('div');
   content.className = 'modal__content';
 
-  const options = [{ key: null, label: 'None' }];
+  // Crop mask grid
+  const grid = document.createElement('div');
+  grid.className = 'crop-mask-grid';
+
+  const options = [{ key: null, label: 'None', icon: 'icons/close.svg' }];
   Object.entries(CROP_MASKS).forEach(([key, m]) => {
-    options.push({ key, label: m.label });
+    options.push({ key, label: m.label, icon: m.icon });
   });
 
   options.forEach(opt => {
-    const row = document.createElement('div');
-    row.className = 'flyout__row';
-    row.style.cursor = 'pointer';
+    const isSelected = photo.cropMask === opt.key;
+    const cell = document.createElement('div');
+    cell.className = 'crop-mask-grid__cell' + (isSelected ? ' crop-mask-grid__cell--active' : '');
+    cell.style.cursor = 'pointer';
 
-    const radio = document.createElement('div');
-    radio.className = 'flyout__radio' +
-      (photo.cropMask === opt.key ? ' flyout__radio--selected' : '');
-    row.appendChild(radio);
+    const icon = document.createElement('img');
+    icon.src = opt.icon;
+    icon.alt = opt.label;
+    icon.className = 'crop-mask-grid__icon';
+    cell.appendChild(icon);
 
     const label = document.createElement('div');
-    label.className = 'flyout__label';
+    label.className = 'crop-mask-grid__label';
     label.textContent = opt.label;
-    row.appendChild(label);
+    cell.appendChild(label);
 
-    row.onclick = () => {
+    cell.onclick = () => {
       photo.cropMask = opt.key;
 
       // Enforce minimum size when applying a mask
@@ -570,8 +614,10 @@ function showCropMaskModal(pageIndex, photoIdx) {
       render();
     };
 
-    content.appendChild(row);
+    grid.appendChild(cell);
   });
+
+  content.appendChild(grid);
 
   // Separator before delete
   const separator = document.createElement('div');
