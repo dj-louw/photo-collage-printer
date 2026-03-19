@@ -609,15 +609,14 @@ function showCropMaskModal(pageIndex, photoIdx) {
 
 // Create resize handles for the selected photo
 function createResizeHandles(pageIndex, idx, photo, inCropMode, container) {
-  const insetPx = CONTROL_INSET_PX + 'px';
   const handlePositions = inCropMode
     ? [
-        { name: 's', left: '50%', bottom: insetPx, cursor: 'ns-resize', transform: 'translateX(-50%)' },
-        { name: 'w', left: insetPx, top: '50%', cursor: 'ew-resize', transform: 'translateY(-50%)' },
-        { name: 'e', right: insetPx, top: '50%', cursor: 'ew-resize', transform: 'translateY(-50%)' }
+        { name: 's', left: '50%', bottom: CONTROL_INSET_PX + 'px', cursor: 'ns-resize', transform: 'translateX(-50%)' },
+        { name: 'w', left: CONTROL_INSET_PX + 'px', top: '50%', cursor: 'ew-resize', transform: 'translateY(-50%)' },
+        { name: 'e', right: CONTROL_INSET_PX + 'px', top: '50%', cursor: 'ew-resize', transform: 'translateY(-50%)' }
       ]
     : [
-        { name: 'se', right: insetPx, bottom: insetPx, cursor: 'nwse-resize' }
+        { name: 'se', right: -(HANDLE_SIZE_PX + CONTROL_INSET_PX) + 'px', bottom: -(HANDLE_SIZE_PX + CONTROL_INSET_PX) + 'px', cursor: 'nwse-resize' }
       ];
 
   handlePositions.forEach(pos => {
@@ -734,9 +733,9 @@ function createImageFrame(pageIndex, idx, photo, container) {
   container.appendChild(imageFrame);
 }
 
-// Create photo control buttons (rotate, crop, ratio presets, delete)
+// Create photo control buttons (rotate, crop, ratio presets)
 function createPhotoControls(pageIndex, idx, inCropMode, container) {
-  const insetPx = CONTROL_INSET_PX + 'px';
+  const outsideTop = -(BUTTON_SIZE_LG_PX + CONTROL_INSET_PX) + 'px';
 
   // Rotate button
   const rotateButton = createIconButton({
@@ -747,8 +746,8 @@ function createPhotoControls(pageIndex, idx, inCropMode, container) {
       state.document.currentPage = pageIndex;
       rotatePhoto(idx);
     },
-    position: { left: insetPx, top: insetPx },
-    counterScale: 'top left',
+    position: { left: '0', top: outsideTop },
+    counterScale: 'bottom left',
   });
   container.appendChild(rotateButton);
 
@@ -762,8 +761,8 @@ function createPhotoControls(pageIndex, idx, inCropMode, container) {
       toggleCrop(idx);
     },
     extraClasses: 'crop-toggle',
-    position: { left: (BUTTON_SIZE_LG_PX + CONTROL_INSET_PX) + 'px', top: insetPx },
-    counterScale: 'top left',
+    position: { left: (BUTTON_SIZE_LG_PX + CONTROL_INSET_PX) + 'px', top: outsideTop },
+    counterScale: 'bottom left',
   });
   container.appendChild(cropButton);
 
@@ -797,8 +796,8 @@ function createPhotoControls(pageIndex, idx, inCropMode, container) {
           render();
         },
         extraClasses: 'crop-ratio-toggle' + (isActive ? ' crop-ratio-active' : ''),
-        position: { left: cfg.offset + 'px', top: insetPx },
-        counterScale: 'top left',
+        position: { left: cfg.offset + 'px', top: outsideTop },
+        counterScale: 'bottom left',
       });
       container.appendChild(btn);
     });
@@ -822,8 +821,8 @@ function createSizeInfo(photo, container) {
   const info = document.createElement('div');
   info.className = 'photo-size-info';
   info.setAttribute('data-html2canvas-ignore', 'true');
-  info.style.right = CONTROL_INSET_PX + 'px';
-  info.style.top = (CONTROL_INSET_PX + BUTTON_SIZE_LG_PX + 4) + 'px';
+  info.style.left = 'calc(100% + ' + CONTROL_INSET_PX + 'px)';
+  info.style.top = (BUTTON_SIZE_LG_PX + CONTROL_INSET_PX) + 'px';
 
   const aspectLine = document.createElement('div');
   aspectLine.textContent = arW + ' : ' + arH;
@@ -853,7 +852,7 @@ function createSizeInfo(photo, container) {
   info.appendChild(aspectLine);
   info.appendChild(widthLine);
   info.appendChild(heightLine);
-  applyCounterScale(info, 'right top');
+  applyCounterScale(info, 'left top');
   container.appendChild(info);
 }
 
@@ -1004,7 +1003,7 @@ function renderCollagePage() {
       // Create photo control buttons using helper
       createPhotoControls(pageIndex, idx, inCropMode, container);
 
-      // Gear button for crop mask settings (top-right)
+      // Gear button for crop mask settings (outside top-right)
       const gearButton = createIconButton({
         iconSrc: 'icons/dots-vertical.svg',
         alt: 'Crop mask settings',
@@ -1012,8 +1011,8 @@ function renderCollagePage() {
           e.stopPropagation();
           showCropMaskModal(pageIndex, idx);
         },
-        position: { right: CONTROL_INSET_PX + 'px', top: CONTROL_INSET_PX + 'px' },
-        counterScale: 'top right',
+        position: { right: -(BUTTON_SIZE_LG_PX + CONTROL_INSET_PX) + 'px', top: '0' },
+        counterScale: 'bottom left',
       });
       container.appendChild(gearButton);
 
