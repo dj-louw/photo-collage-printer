@@ -541,6 +541,108 @@ body.printing-pdf .help-overlay {
   margin-right: 8px;
 }
 
+/* ============================================
+   Manual Size Input (in crop mask modal)
+   ============================================ */
+
+.manual-size-section {
+  padding: 4px 0;
+}
+
+.manual-size-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  padding: 4px 12px;
+}
+
+.manual-size-field {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+
+.manual-size-label {
+  font-size: 11px;
+  color: #888;
+  margin-bottom: 4px;
+}
+
+.manual-size-input {
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-size: 14px;
+  box-sizing: border-box;
+  outline: none;
+}
+
+.manual-size-input:focus {
+  border-color: #0078d4;
+  box-shadow: 0 0 0 1px #0078d4;
+}
+
+/* Remove spinner arrows on number inputs */
+.manual-size-input::-webkit-inner-spin-button,
+.manual-size-input::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.manual-size-input {
+  -moz-appearance: textfield;
+}
+
+.manual-size-constrain {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  background: #f5f5f5;
+  cursor: pointer;
+  flex-shrink: 0;
+  padding: 0;
+}
+
+.manual-size-constrain:hover {
+  background: #e8e8e8;
+}
+
+.manual-size-constrain.active {
+  background: #0078d4;
+  border-color: #0078d4;
+}
+
+.manual-size-constrain.active .manual-size-constrain__icon {
+  filter: brightness(0) invert(1);
+}
+
+.manual-size-constrain__icon {
+  width: 18px;
+  height: 18px;
+}
+
+.manual-size-ok {
+  display: block;
+  width: calc(100% - 24px);
+  margin: 8px 12px 4px 12px;
+  padding: 8px 0;
+  border: none;
+  border-radius: 4px;
+  background: #0078d4;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.manual-size-ok:hover {
+  background: #006abd;
+}
+
 @media (max-width: 600px) {
   #app {
     /* Minimal padding on mobile; leave room for side controls */

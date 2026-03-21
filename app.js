@@ -649,6 +649,140 @@ function showCropMaskModal(pageIndex, photoIdx) {
 
   content.appendChild(grid);
 
+  // Separator before manual size inputs
+  const sizeSeparator = document.createElement('div');
+  sizeSeparator.className = 'modal__separator';
+  content.appendChild(sizeSeparator);
+
+  // Manual size input section
+  const sizeSection = document.createElement('div');
+  sizeSection.className = 'manual-size-section';
+
+  const sizeTitle = document.createElement('div');
+  sizeTitle.className = 'flyout__title';
+  sizeTitle.textContent = 'Image Size';
+  sizeSection.appendChild(sizeTitle);
+
+  const sizeRow = document.createElement('div');
+  sizeRow.className = 'manual-size-row';
+
+  // Width input
+  const widthGroup = document.createElement('div');
+  widthGroup.className = 'manual-size-field';
+  const widthLabel = document.createElement('label');
+  widthLabel.className = 'manual-size-label';
+  widthLabel.textContent = 'W (mm)';
+  const widthInput = document.createElement('input');
+  widthInput.type = 'number';
+  widthInput.className = 'manual-size-input';
+  widthInput.min = '1';
+  widthInput.step = '0.1';
+  widthInput.value = (photo.width / PX_PER_MM).toFixed(1);
+  widthGroup.appendChild(widthLabel);
+  widthGroup.appendChild(widthInput);
+  sizeRow.appendChild(widthGroup);
+
+  // Constrain aspect ratio toggle
+  let constrainAspect = true;
+  const aspectRatio = photo.width / photo.height;
+
+  const constrainBtn = document.createElement('button');
+  constrainBtn.className = 'manual-size-constrain active';
+  constrainBtn.title = 'Constrain aspect ratio';
+  const constrainIcon = document.createElement('img');
+  constrainIcon.src = 'icons/link.svg';
+  constrainIcon.alt = 'Constrain aspect ratio';
+  constrainIcon.className = 'manual-size-constrain__icon';
+  constrainBtn.appendChild(constrainIcon);
+
+  constrainBtn.onclick = () => {
+    constrainAspect = !constrainAspect;
+    constrainBtn.classList.toggle('active', constrainAspect);
+    constrainIcon.src = constrainAspect ? 'icons/link.svg' : 'icons/link-off.svg';
+  };
+  sizeRow.appendChild(constrainBtn);
+
+  // Height input
+  const heightGroup = document.createElement('div');
+  heightGroup.className = 'manual-size-field';
+  const heightLabel = document.createElement('label');
+  heightLabel.className = 'manual-size-label';
+  heightLabel.textContent = 'H (mm)';
+  const heightInput = document.createElement('input');
+  heightInput.type = 'number';
+  heightInput.className = 'manual-size-input';
+  heightInput.min = '1';
+  heightInput.step = '0.1';
+  heightInput.value = (photo.height / PX_PER_MM).toFixed(1);
+  heightGroup.appendChild(heightLabel);
+  heightGroup.appendChild(heightInput);
+  sizeRow.appendChild(heightGroup);
+
+  sizeSection.appendChild(sizeRow);
+
+  // Update linked dimension when one changes
+  widthInput.addEventListener('input', () => {
+    if (constrainAspect) {
+      const wMm = parseFloat(widthInput.value);
+      if (Number.isFinite(wMm) && wMm > 0) {
+        heightInput.value = (wMm / aspectRatio).toFixed(1);
+      }
+    }
+  });
+
+  heightInput.addEventListener('input', () => {
+    if (constrainAspect) {
+      const hMm = parseFloat(heightInput.value);
+      if (Number.isFinite(hMm) && hMm > 0) {
+        widthInput.value = (hMm * aspectRatio).toFixed(1);
+      }
+    }
+  });
+
+  // OK button
+  const okBtn = document.createElement('button');
+  okBtn.className = 'manual-size-ok';
+  okBtn.textContent = 'OK';
+  okBtn.onclick = () => {
+    const newWidthMm = parseFloat(widthInput.value);
+    const newHeightMm = parseFloat(heightInput.value);
+    if (!Number.isFinite(newWidthMm) || !Number.isFinite(newHeightMm) ||
+        newWidthMm <= 0 || newHeightMm <= 0) {
+      return;
+    }
+
+    const newWidthPx = newWidthMm * PX_PER_MM;
+    const newHeightPx = newHeightMm * PX_PER_MM;
+
+    // Enforce minimum size
+    const minSize = getMinPhotoSize(photo);
+    const clampedWidth = Math.max(newWidthPx, minSize.width);
+    const clampedHeight = Math.max(newHeightPx, minSize.height);
+
+    // Clamp to page bounds
+    const pagePx = page.size.width * PX_PER_MM;
+    const pageHPx = page.size.height * PX_PER_MM;
+    const finalWidth = Math.min(clampedWidth, pagePx - photo.x);
+    const finalHeight = Math.min(clampedHeight, pageHPx - photo.y);
+
+    // Scale image proportionally with box
+    const scaleX = finalWidth / photo.width;
+    const scaleY = finalHeight / photo.height;
+    photo.imageWidth = photo.imageWidth * scaleX;
+    photo.imageHeight = photo.imageHeight * scaleY;
+    photo.imageOffsetX = (photo.imageOffsetX || 0) * scaleX;
+    photo.imageOffsetY = (photo.imageOffsetY || 0) * scaleY;
+
+    photo.width = finalWidth;
+    photo.height = finalHeight;
+
+    overlay.remove();
+    render();
+  };
+  sizeSection.appendChild(okBtn);
+
+  content.appendChild(sizeSection);
+
   // Separator before delete
   const separator = document.createElement('div');
   separator.className = 'modal__separator';
